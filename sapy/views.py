@@ -2752,11 +2752,17 @@ def write_model_to_file(file_path, table_name, model_code):
 	else:
 		existing_content = ""
 
-	# Asegurar imports únicos al inicio
-	header_imports = "from django.db import models\nfrom django.utils import timezone\n\n"
+	# Asegurar imports únicos al inicio (limpiar duplicados y dejar uno solo)
+	from_lines = [
+		"from django.db import models\n",
+		"from django.utils import timezone\n",
+	]
 	content = existing_content or ""
-	if 'from django.db import models' not in content:
-		content = header_imports + content
+	# Eliminar repeticiones de los mismos imports
+	for l in from_lines:
+		content = content.replace(l, "")
+	# Insertar cabecera limpia
+	content = "".join(from_lines) + "\n" + content.lstrip()
 
 	# Reemplazar bloque de clase existente usando regex multiline
 	pattern = rf"^class\s+{re.escape(model_class)}\(models\.Model\):[\s\S]*?(?=^class\s+|\Z)"
