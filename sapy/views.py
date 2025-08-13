@@ -2606,14 +2606,9 @@ def generate_django_model_for_table(application, table):
 
 
 def generate_model_code(application, table, table_columns):
-    """Genera el código Python del modelo Django."""
+    """Genera SOLO la clase del modelo (sin imports)."""
     model_lines = []
-    
-    # Imports
-    model_lines.append("from django.db import models")
-    model_lines.append("from django.utils import timezone")
-    model_lines.append("")
-    
+
     # Clase del modelo
     model_lines.append(f"class {table.name.title()}(models.Model):")
     model_lines.append(f'    """Modelo para la tabla {table.name}"""')
@@ -2804,10 +2799,10 @@ def run_migrations_in_app(application, table_name):
         env = os.environ.copy()
         env['DJANGO_SETTINGS_MODULE'] = f"{application.name}.settings"
         
-        # Ejecutar makemigrations
+        # Ejecutar makemigrations (sin app label si no está instalada)
         print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
         result = subprocess.run(
-            [python_cmd, 'manage.py', 'makemigrations', application.name],
+            [python_cmd, 'manage.py', 'makemigrations'],
             cwd=app_dir,
             capture_output=True,
             text=True,
@@ -2821,10 +2816,10 @@ def run_migrations_in_app(application, table_name):
         
         print(f"DEBUG: makemigrations exitoso")
         
-        # Ejecutar migrate
+        # Ejecutar migrate (migrar todo; la app destino debe estar en INSTALLED_APPS si corresponde)
         print(f"DEBUG: Ejecutando migrate en {app_dir}")
         result = subprocess.run(
-            [python_cmd, 'manage.py', 'migrate', application.name],
+            [python_cmd, 'manage.py', 'migrate'],
             cwd=app_dir,
             capture_output=True,
             text=True,
