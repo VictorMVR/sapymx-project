@@ -1,0 +1,310 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Todas las Columnas BD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2><i class="bi bi-list-columns text-primary"></i> Todas las Columnas BD</h2>
+      <p class="text-muted mb-0">
+        Gestiona todas las columnas del sistema agrupadas por nombre
+        {% if filtered_count != total_count %}
+          - Mostrando {{ filtered_count }} de {{ total_count }} columnas únicas
+        {% else %}
+          - {{ total_count }} columna{{ total_count|pluralize }} única{{ total_count|pluralize }}
+        {% endif %}
+      </p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url 'sapy:db_table_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-table"></i> Ver Tablas
+      </a>
+      <a href="{% url 'sapy:db_table_list' %}" class="btn btn-outline-info">
+        <i class="bi bi-table"></i> Ver Tablas
+      </a>
+      <a href="{% url 'sapy:migrate_columns_ui' %}" class="btn btn-outline-warning">
+        <i class="bi bi-arrow-repeat"></i> Migrar UI
+      </a>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="get" class="row g-3">
+        <div class="col-md-6">
+          <label for="search" class="form-label">Buscar</label>
+          <input type="text" class="form-control" id="search" name="search" 
+                 value="{{ search_query }}" placeholder="Nombre de columna...">
+        </div>
+        <div class="col-md-4">
+          <label for="data_type" class="form-label">Tipo de Dato</label>
+          <select class="form-select" id="data_type" name="data_type">
+            <option value="">Todos los tipos</option>
+            {% for type in data_types %}
+              <option value="{{ type }}" {% if type == data_type_filter %}selected{% endif %}>
+                {{ type|upper }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-outline-secondary me-2">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a href="{% url 'sapy:db_column_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-circle"></i>
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if columns %}
+    <!-- Vista móvil: tarjetas -->
+    <div class="d-md-none">
+      {% for column in columns %}
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <h6 class="card-title mb-1">
+                  <strong>{{ column.name }}</strong>
+                  <small class="text-muted d-block">
+                    {% if column.is_in_use %}
+                      {% if column.total_usage > 1 %}
+                        Usada en {{ column.total_usage }} tablas
+                      {% else %}
+                        Usada en 1 tabla
+                      {% endif %}
+                    {% else %}
+                      <span class="text-success">Disponible para usar</span>
+                    {% endif %}
+                  </small>
+                </h6>
+              </div>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                        type="button" data-bs-toggle="dropdown">
+                  <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul class="dropdown-menu">
+                  {% if column.is_in_use %}
+                    <li>
+                      <a class="dropdown-item" href="{% url 'sapy:db_column_edit_standalone' column.first_instance.pk %}">
+                        <i class="bi bi-pencil"></i> Editar Columna
+                      </a>
+                    </li>
+                    {% if column.total_usage > 1 %}
+                      <li>
+                        <a class="dropdown-item" href="{% url 'sapy:db_table_list' %}">
+                          <i class="bi bi-table"></i> Ver Tablas
+                        </a>
+                      </li>
+                    {% endif %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <form method="post" action="{% url 'sapy:db_column_list' %}" 
+                            class="d-inline" onsubmit="return confirm('¿Desvincular columna {{ column.name }} de la tabla?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="column_id" value="{{ column.first_instance.pk }}">
+                        <button type="submit" class="dropdown-item text-warning" 
+                                {% if not column.can_delete %}disabled title="No se puede desvincular: está en múltiples tablas"{% endif %}>
+                          <i class="bi bi-link-break"></i> Desvincular
+                        </button>
+                      </form>
+                    </li>
+                  {% else %}
+                    <li>
+                      {% if column.first_instance %}
+                        <a class="dropdown-item" href="{% url 'sapy:db_column_edit_standalone' column.first_instance.pk %}">
+                          <i class="bi bi-pencil"></i> Editar Definición
+                        </a>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                          <form method="post" action="{% url 'sapy:db_column_list' %}" 
+                                class="d-inline" onsubmit="return confirm('¿Eliminar definición de columna {{ column.name }}?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="column_id" value="{{ column.first_instance.pk }}">
+                            <button type="submit" class="dropdown-item text-danger">
+                              <i class="bi bi-trash"></i> Eliminar Definición
+                            </button>
+                          </form>
+                        </li>
+                      {% else %}
+                        <li class="dropdown-item text-muted disabled">
+                          <i class="bi bi-exclamation-triangle"></i> Columna no disponible
+                        </li>
+                      {% endif %}
+                  {% endif %}
+                </ul>
+              </div>
+            </div>
+            
+            <div class="row g-2 text-sm">
+              <div class="col-6">
+                <strong>Tipo:</strong> <span class="badge bg-secondary">{{ column.data_type|upper }}</span>
+              </div>
+              <div class="col-6">
+                <strong>Posición:</strong> {{ column.first_instance.position|default:"-" }}
+              </div>
+              <div class="col-12">
+                <strong>Propiedades:</strong>
+                {% if column.first_instance.is_primary_key %}<span class="badge bg-warning text-dark">PK</span>{% endif %}
+                {% if column.first_instance.is_unique %}<span class="badge bg-info">Único</span>{% endif %}
+                {% if column.first_instance.is_index %}<span class="badge bg-success">Índice</span>{% endif %}
+                {% if not column.first_instance.is_nullable %}<span class="badge bg-danger">No Nulo</span>{% endif %}
+                {% if column.first_instance.is_auto_increment %}<span class="badge bg-primary">Auto Inc</span>{% endif %}
+              </div>
+              {% if column.first_instance.references_table %}
+                <div class="col-12">
+                  <strong>FK:</strong> <span class="badge bg-dark">{{ column.first_instance.references_table.name }}</span>
+                </div>
+              {% endif %}
+              {% if column.first_instance.notes %}
+                <div class="col-12">
+                  <small class="text-muted">{{ column.first_instance.notes|truncatechars:80 }}</small>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Vista desktop: tabla -->
+    <div class="card d-none d-md-block">
+      <div class="card-body p-0 table-responsive">
+        <table class="table table-striped align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Definición</th>
+              <th>Tipo</th>
+              <th>Uso</th>
+              <th>Propiedades</th>
+              <th>Default</th>
+              <th>Notas</th>
+              <th class="text-end">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for column in columns %}
+              <tr>
+                <td>
+                  <strong>{{ column.name }}</strong>
+                </td>
+                <td>
+                  <span class="badge bg-secondary">{{ column.first_instance.data_type|upper }}</span>
+                  {% if column.first_instance.length %}({{ column.first_instance.length }}){% endif %}
+                  {% if column.first_instance.numeric_precision %}({{ column.first_instance.numeric_precision }}{% if column.first_instance.numeric_scale %},{{ column.first_instance.numeric_scale }}{% endif %}){% endif %}
+                </td>
+                <td>
+                  {% if column.is_in_use %}
+                    {% if column.total_usage > 1 %}
+                      <span class="badge bg-success">{{ column.total_usage }} tablas</span>
+                      <br><small class="text-muted">{{ column.tables_using|join:", " }}</small>
+                    {% else %}
+                      <span class="badge bg-secondary">1 tabla</span>
+                      <br><small class="text-muted">{{ column.tables_using.0 }}</small>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge bg-info">Disponible</span>
+                    <br><small class="text-muted">Sin usar</small>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if column.first_instance.is_primary_key %}<span class="badge bg-warning text-dark me-1">PK</span>{% endif %}
+                  {% if column.first_instance.is_unique %}<span class="badge bg-info me-1">Único</span>{% endif %}
+                  {% if column.first_instance.is_index %}<span class="badge bg-success me-1">Índice</span>{% endif %}
+                  {% if not column.first_instance.is_nullable %}<span class="badge bg-danger me-1">No Nulo</span>{% endif %}
+                  {% if column.first_instance.is_auto_increment %}<span class="badge bg-primary me-1">Auto Inc</span>{% endif %}
+                </td>
+                <td>
+                  {% if column.first_instance.default_value %}
+                    <code class="text-muted">{{ column.first_instance.default_value|truncatechars:20 }}</code>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  {% if column.first_instance.notes %}
+                    <span class="text-muted" title="{{ column.first_instance.notes }}">{{ column.first_instance.notes|truncatechars:30 }}</span>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm">
+                    {% if column.is_in_use %}
+                      <a href="{% url 'sapy:db_column_edit_standalone' column.first_instance.pk %}" 
+                         class="btn btn-outline-primary" title="Editar columna">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                      {% if column.total_usage > 1 %}
+                        <a href="{% url 'sapy:db_table_list' %}" 
+                           class="btn btn-outline-info" title="Ver tablas">
+                          <i class="bi bi-table"></i>
+                        </a>
+                      {% endif %}
+                      <form method="post" action="{% url 'sapy:db_column_list' %}" 
+                            class="d-inline" onsubmit="return confirm('¿Desvincular columna {{ column.name }} de la tabla?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="column_id" value="{{ column.first_instance.pk }}">
+                        <button type="submit" class="btn btn-outline-warning" title="Desvincular columna"
+                                {% if not column.can_delete %}disabled{% endif %}>
+                          <i class="bi bi-link-break"></i>
+                        </button>
+                      </form>
+                    {% else %}
+                      {% if column.first_instance %}
+                        <a href="{% url 'sapy:db_column_edit_standalone' column.first_instance.pk %}" 
+                           class="btn btn-outline-primary" title="Editar definición">
+                          <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sapy:db_column_list' %}" 
+                              class="d-inline" onsubmit="return confirm('¿Eliminar definición de columna {{ column.name }}?');">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="delete">
+                          <input type="hidden" name="column_id" value="{{ column.first_instance.pk }}">
+                          <button type="submit" class="btn btn-outline-danger" title="Eliminar definición">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </form>
+                      {% else %}
+                        <span class="text-muted">Columna no disponible</span>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-list-columns text-muted" style="font-size: 3rem;"></i>
+        <h4 class="text-muted mt-3">No hay columnas</h4>
+        {% if search_query or data_type_filter %}
+          <p class="text-muted">No se encontraron columnas con los filtros aplicados.</p>
+          <a href="{% url 'sapy:db_column_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-circle"></i> Limpiar Filtros
+          </a>
+        {% else %}
+          <p class="text-muted">No hay columnas registradas en el sistema.</p>
+          <a href="{% url 'sapy:db_table_list' %}" class="btn btn-primary">
+            <i class="bi bi-table"></i> Ver Tablas BD
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

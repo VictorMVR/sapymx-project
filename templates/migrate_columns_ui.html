@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2><i class="bi bi-arrow-repeat text-primary"></i> {{ title }}</h2>
+      <p class="text-muted mb-0">
+        Migra columnas existentes para crear automáticamente sus componentes de UI
+      </p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url 'sapy:db_column_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-list-columns"></i> Volver a Columnas
+      </a>
+    </div>
+  </div>
+
+  <!-- Información de migración -->
+  <div class="row">
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h3 class="text-primary">{{ total_columns }}</h3>
+          <p class="card-text">Total de Columnas</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h3 class="text-success">{{ columns_with_ui }}</h3>
+          <p class="card-text">Con Componentes UI</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h3 class="text-warning">{{ columns_without_ui }}</h3>
+          <p class="card-text">Sin Componentes UI</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if columns_without_ui > 0 %}
+    <!-- Migración disponible -->
+    <div class="card mt-4">
+      <div class="card-body">
+        <h5 class="card-title">
+          <i class="bi bi-info-circle text-info"></i> Migración Disponible
+        </h5>
+        <p class="card-text">
+          Se encontraron <strong>{{ columns_without_ui }}</strong> columnas que no tienen componentes de UI configurados.
+          Al ejecutar la migración, se crearán automáticamente:
+        </p>
+        <ul>
+          <li><strong>UiColumn:</strong> Configuración de visualización en listas</li>
+          <li><strong>UiField:</strong> Configuración de campos en formularios</li>
+          <li><strong>FormQuestion:</strong> Preguntas para formularios dinámicos</li>
+        </ul>
+        
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle"></i>
+          <strong>Nota:</strong> Esta operación es segura y no afectará los datos existentes. 
+          Solo creará los componentes de UI faltantes.
+        </div>
+        
+        <form method="post" onsubmit="return confirm('¿Estás seguro de que quieres migrar {{ columns_without_ui }} columnas?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-arrow-repeat"></i> Ejecutar Migración
+          </button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <!-- Todas las columnas ya tienen UI -->
+    <div class="card mt-4">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+        <h4 class="text-success mt-3">¡Migración Completa!</h4>
+        <p class="text-muted">
+          Todas las columnas del sistema ya tienen sus componentes de UI configurados.
+        </p>
+        <a href="{% url 'sapy:db_column_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-list-columns"></i> Ver Columnas
+        </a>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Información adicional -->
+  <div class="card mt-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="bi bi-question-circle text-secondary"></i> ¿Qué hace la migración?
+      </h5>
+      <div class="row">
+        <div class="col-md-6">
+          <h6>Conversión Automática de Tipos:</h6>
+          <ul class="small">
+            <li><code>integer</code> → <code>number</code></li>
+            <li><code>varchar</code> → <code>text</code></li>
+            <li><code>text</code> → <code>textarea</code></li>
+            <li><code>boolean</code> → <code>checkbox</code></li>
+            <li><code>date</code> → <code>date</code></li>
+            <li><code>timestamp</code> → <code>datetime-local</code></li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <h6>Configuración Inteligente:</h6>
+          <ul class="small">
+            <li>Etiquetas generadas automáticamente</li>
+            <li>Validaciones basadas en propiedades de BD</li>
+            <li>Campos PK auto-increment como ocultos</li>
+            <li>Campos booleanos como toggles en listas</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

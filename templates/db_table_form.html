@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    {% if not formset %}
+    <div>
+      <a class="btn btn-outline-secondary w-100 w-md-auto" href="{% url 'sapy:db_table_list' %}"><i class="bi bi-arrow-left"></i> Volver</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="card mb-3">
+      <div class="card-header">Datos de la Tabla</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">{{ form.name.label_tag }} {{ form.name }}</div>
+          <div class="col-md-4">{{ form.alias.label_tag }} {{ form.alias }}</div>
+          <div class="col-md-4">{{ form.schema_name.label_tag }} {{ form.schema_name }}</div>
+          <div class="col-md-4">{{ form.table_kind.label_tag }} {{ form.table_kind }}</div>
+          <div class="col-md-12">{{ form.description.label_tag }} {{ form.description }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if formset %}
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Columnas</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addFormRow()">
+          <i class="bi bi-plus-circle"></i> Agregar Columna
+        </button>
+      </div>
+      <div class="card-body table-responsive">
+        {{ formset.management_form }}
+        <div id="formset-rows">
+          {% for f in formset.forms %}
+          <div class="border rounded p-3 mb-3 formset-row">
+            {% if f.non_field_errors %}<div class="text-danger">{{ f.non_field_errors }}</div>{% endif %}
+            <div class="row g-2">
+              <div class="col-md-3">{{ f.name.label_tag }} {{ f.name }}</div>
+              <div class="col-md-2">{{ f.data_type.label_tag }} {{ f.data_type }}</div>
+              <div class="col-md-2">{{ f.length.label_tag }} {{ f.length }}</div>
+              <div class="col-md-2">{{ f.numeric_precision.label_tag }} {{ f.numeric_precision }}</div>
+              <div class="col-md-1">{{ f.numeric_scale.label_tag }} {{ f.numeric_scale }}</div>
+              <div class="col-md-2">{{ f.position.label_tag }} {{ f.position }}</div>
+              <div class="col-md-2 form-check">{{ f.is_nullable }} {{ f.is_nullable.label_tag }}</div>
+              <div class="col-md-2 form-check">{{ f.is_unique }} {{ f.is_unique.label_tag }}</div>
+              <div class="col-md-2 form-check">{{ f.is_index }} {{ f.is_index.label_tag }}</div>
+              <div class="col-md-2 form-check">{{ f.is_primary_key }} {{ f.is_primary_key.label_tag }}</div>
+              <div class="col-md-2 form-check">{{ f.is_auto_increment }} {{ f.is_auto_increment.label_tag }}</div>
+              <div class="col-md-4">{{ f.default_value.label_tag }} {{ f.default_value }}</div>
+              <div class="col-md-4">{{ f.references_table.label_tag }} {{ f.references_table }}</div>
+              <div class="col-md-2">{{ f.on_delete.label_tag }} {{ f.on_delete }}</div>
+              <div class="col-md-12">{{ f.notes.label_tag }} {{ f.notes }}</div>
+              <div class="col-md-2 form-check">{{ f.DELETE }} {{ f.DELETE.label_tag }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-end mb-5">
+      <button type="submit" class="btn btn-success">{{ submit_text }}</button>
+    </div>
+  </form>
+
+</div>
+
+{% block extra_js %}
+<script>
+function addFormRow() {
+  const total = document.getElementById('id_columns-TOTAL_FORMS');
+  const idx = parseInt(total.value, 10);
+  const container = document.getElementById('formset-rows');
+  const first = container.querySelector('.formset-row');
+  if (!first) return;
+  const clone = first.cloneNode(true);
+  // Limpiar valores y ajustar índices
+  clone.querySelectorAll('input, select, textarea').forEach(el => {
+    if (el.name) {
+      el.name = el.name.replace(/columns-(\d+)-/g, `columns-${idx}-`);
+      el.id = el.id.replace(/columns-(\d+)-/g, `columns-${idx}-`);
+    }
+    if (el.type === 'checkbox') el.checked = false; else el.value = '';
+  });
+  container.appendChild(clone);
+  total.value = idx + 1;
+}
+</script>
+{% endblock %}
+{% endblock %}
+

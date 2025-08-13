@@ -1,0 +1,365 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary w-100 w-md-auto" href="{% url 'sapy:db_table_list' %}"><i class="bi bi-arrow-left"></i> Volver</a>
+      <a class="btn btn-primary w-100 w-md-auto" href="{% url 'sapy:db_column_create' table.pk %}"><i class="bi bi-plus-square"></i> Nueva Columna</a>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12 col-md-3"><div class="text-muted small">Esquema</div><code>{{ table.schema_name|default:'public' }}</code></div>
+        <div class="col-12 col-md-3"><div class="text-muted small">Tabla</div><code>{{ table.name }}</code></div>
+        <div class="col-12 col-md-3"><div class="text-muted small">Alias</div>{{ table.alias }}</div>
+        <div class="col-12 col-md-3"><div class="text-muted small">Tipo</div>{{ table.get_table_kind_display }}</div>
+      </div>
+      <div class="row g-2 mt-3 align-items-end">
+        <div class="col-12 col-md-6">
+          <label class="form-label small">Buscar columna existente</label>
+          <input type="text" id="columnSearch" class="form-control" placeholder="Escribe el nombre de la columna">
+          <select id="searchResults" class="form-select mt-2" size="4" style="display: none; max-height: 200px; overflow-y: auto;">
+          </select>
+        </div>
+        <div class="col-12 col-md-3 d-grid d-md-block">
+          <a class="btn btn-primary mt-2 mt-md-0" href="{% url 'sapy:db_column_create' table.pk %}"><i class="bi bi-plus-square"></i> Crear y asignar nueva</a>
+        </div>
+        <div class="col-12 col-md-3 d-grid d-md-block">
+          <button type="button" id="btnGeneratePage" class="btn btn-success mt-2 mt-md-0">
+            <i class="bi bi-magic"></i> Generar página
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- móvil: tarjetas con drag & drop -->
+  <div class="d-block d-md-none">
+    <div class="mb-2 text-muted small">Columnas asignadas</div>
+    {% for tc in table_columns %}
+    <div class="card mb-2" data-col-id="{{ tc.id }}">
+      <div class="card-body handle" style="touch-action: none;">
+        <div class="d-flex justify-content-between align-items-start">
+          <strong>{{ tc.column.name }}</strong>
+          <div class="d-flex gap-2">
+            {% if tc.is_primary_key %}<span class="badge bg-dark">PK</span>{% endif %}
+            <form method="post" action="{% url 'sapy:db_table_column_delete' tc.pk %}" onsubmit="return confirm('¿Desvincular columna {{ tc.column.name }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-warning"><i class="bi bi-link-break"></i></button>
+            </form>
+          </div>
+        </div>
+        <div class="small text-muted">{{ tc.column.data_type }}{% if tc.column.length %}({{ tc.column.length }}){% endif %}{% if tc.column.numeric_precision %}({{ tc.column.numeric_precision }}{% if tc.column.numeric_scale %},{{ tc.column.numeric_scale }}{% endif %}){% endif %}</div>
+        <div class="small">Posición: <span class="col-pos">{{ tc.position }}</span></div>
+        <div class="small">Nullable: {% if tc.is_nullable is not None %}{{ tc.is_nullable|yesno:"Sí,No" }}{% else %}{{ tc.column.is_nullable|yesno:"Sí,No" }}{% endif %} | Única: {% if tc.is_unique is not None %}{{ tc.is_unique|yesno:"Sí,No" }}{% else %}{{ tc.column.is_unique|yesno:"Sí,No" }}{% endif %}</div>
+        {% if tc.references_table %}<div class="small">FK: {{ tc.fk_constraint_name }}</div>{% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <div class="text-center text-muted p-4">Sin columnas</div>
+    {% endfor %}
+  </div>
+
+  <!-- desktop: tabla -->
+  <div class="card d-none d-md-block">
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-striped align-middle mb-0" id="columnsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Longitud/Prec</th>
+            <th>Nullable</th>
+            <th>Única</th>
+            <th>Índice</th>
+            <th>PK</th>
+            <th>Autoinc</th>
+            <th>Default</th>
+            <th>FK</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tc in table_columns %}
+          <tr draggable="true" data-col-id="{{ tc.id }}">
+            <td class="col-pos">{{ tc.position }}</td>
+            <td>{{ tc.column.name }}</td>
+            <td>{{ tc.column.data_type }}</td>
+            <td>
+              {% if tc.column.length %}{{ tc.column.length }}{% elif tc.column.numeric_precision %}{{ tc.column.numeric_precision }}{% if tc.column.numeric_scale %},{{ tc.column.numeric_scale }}{% endif %}{% endif %}
+            </td>
+            <td>{% if tc.is_nullable is not None %}{{ tc.is_nullable|yesno:"Sí,No" }}{% else %}{{ tc.column.is_nullable|yesno:"Sí,No" }}{% endif %}</td>
+            <td>{% if tc.is_unique is not None %}{{ tc.is_unique|yesno:"Sí,No" }}{% else %}{{ tc.column.is_unique|yesno:"Sí,No" }}{% endif %}</td>
+            <td>{% if tc.is_index is not None %}{{ tc.is_index|yesno:"Sí,No" }}{% else %}{{ tc.column.is_index|yesno:"Sí,No" }}{% endif %}</td>
+            <td>{% if tc.is_primary_key is not None %}{{ tc.is_primary_key|yesno:"Sí,No" }}{% else %}{{ tc.column.is_primary_key|yesno:"Sí,No" }}{% endif %}</td>
+            <td>{% if tc.is_auto_increment is not None %}{{ tc.is_auto_increment|yesno:"Sí,No" }}{% else %}{{ tc.column.is_auto_increment|yesno:"Sí,No" }}{% endif %}</td>
+            <td><code>{% if tc.default_value %}{{ tc.default_value }}{% else %}{{ tc.column.default_value }}{% endif %}</code></td>
+            <td>{% if tc.references_table %}{{ tc.fk_constraint_name }}{% else %}-{% endif %}</td>
+            <td class="text-end">
+              <form method="post" action="{% url 'sapy:db_table_column_delete' tc.pk %}" class="d-inline" onsubmit="return confirm('¿Desvincular columna {{ tc.column.name }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="11" class="text-center p-4">Sin columnas</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% block extra_js %}
+<script>
+try{
+// Utilidad CSRF desde cookie
+function getCookie(name){
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return '';
+}
+
+// Reordenar (desktop) con inserción durante dragover
+(function(){
+  const tbody = document.querySelector('#columnsTable tbody');
+  if (!tbody) return;
+  let dragSrc = null;
+  tbody.addEventListener('dragstart', e => {
+    const row = e.target.closest('tr');
+    if (!row) return;
+    dragSrc = row;
+    row.classList.add('table-active');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', row.getAttribute('data-col-id'));
+    }
+  });
+  function updatePositionsTable(container){
+    Array.from(container.querySelectorAll('tr[data-col-id]')).forEach((row, idx) => {
+      const cell = row.querySelector('td.col-pos');
+      if (cell) cell.textContent = String(idx + 1);
+    });
+  }
+
+  tbody.addEventListener('dragover', e => {
+    e.preventDefault();
+    const row = e.target.closest('tr');
+    if (!row || row === dragSrc) return;
+    const rect = row.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > (rect.height / 2);
+    tbody.insertBefore(dragSrc, after ? row.nextSibling : row);
+    updatePositionsTable(tbody);
+  });
+  tbody.addEventListener('dragend', () => {
+    if (dragSrc) dragSrc.classList.remove('table-active');
+    updatePositionsTable(tbody);
+    const order = collectOrder(tbody);
+    saveOrder(order);
+    dragSrc = null;
+  });
+
+  function collectOrder(container){
+    return Array.from(container.querySelectorAll('[data-col-id]')).map(el => parseInt(el.getAttribute('data-col-id')));
+  }
+  function saveOrder(order){
+    fetch('{% url "sapy:db_table_reorder" table.pk %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({ order })
+    }).then(async r => {
+      if (!r.ok) {
+        const txt = await r.text();
+        throw new Error(txt || r.statusText);
+      }
+      return r.json();
+    }).then(j => {
+      if (!j.success) alert('No se pudo guardar el orden: ' + (j.message || ''));
+    }).catch(err => alert('No se pudo guardar el orden: ' + (err && err.message ? err.message : 'Error')));
+  }
+  // Guardado en vivo: ya se hace en dragend
+})();
+
+// Reordenar (móvil): botones subir/bajar y guardar
+(function(){
+  const container = document.querySelector('.d-block.d-md-none');
+  if (!container) return;
+
+  function updatePositionsCards(){
+    Array.from(container.querySelectorAll('.card[data-col-id]')).forEach((card, idx) => {
+      const el = card.querySelector('.col-pos');
+      if (el) el.textContent = String(idx + 1);
+    });
+  }
+
+  container.querySelectorAll('.card[data-col-id]').forEach(card => {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'd-flex gap-2 mt-2';
+    const up = document.createElement('button');
+    up.type = 'button'; up.className = 'btn btn-sm btn-outline-secondary'; up.textContent = 'Subir';
+    const down = document.createElement('button');
+    down.type = 'button'; down.className = 'btn btn-sm btn-outline-secondary'; down.textContent = 'Bajar';
+    toolbar.appendChild(up); toolbar.appendChild(down);
+    card.querySelector('.card-body').appendChild(toolbar);
+
+    function afterMove(){
+      const order = collectOrder();
+      saveOrder(order);
+    }
+
+    up.addEventListener('click', () => {
+      const prev = card.previousElementSibling;
+      if (prev && prev.hasAttribute('data-col-id')) container.insertBefore(card, prev);
+      afterMove();
+      updatePositionsCards();
+    });
+    down.addEventListener('click', () => {
+      const next = card.nextElementSibling;
+      if (next) container.insertBefore(next, card);
+      afterMove();
+      updatePositionsCards();
+    });
+  });
+
+  // Inicial
+  updatePositionsCards();
+
+  function collectOrder(){
+    return Array.from(container.querySelectorAll('[data-col-id]')).map(el => parseInt(el.getAttribute('data-col-id')));
+  }
+  function saveOrder(order){
+    fetch('{% url "sapy:db_table_reorder" table.pk %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({ order })
+    }).then(async r => {
+      if (!r.ok) {
+        const txt = await r.text();
+        throw new Error(txt || r.statusText);
+      }
+      return r.json();
+    }).then(j => {
+      if (!j.success) alert('No se pudo guardar el orden: ' + (j.message || ''));
+    }).catch(err => alert('No se pudo guardar el orden: ' + (err && err.message ? err.message : 'Error')));
+  }
+  // Guardado en vivo: se hace tras subir/bajar
+})();
+
+// Buscador de columnas independiente
+(function(){
+  const searchInput = document.getElementById('columnSearch');
+  const resultsSelect = document.getElementById('searchResults');
+  if (!searchInput || !resultsSelect) return;
+
+  // Lista de todas las columnas disponibles (del backend)
+  const availableColumns = [
+    {% for c in existing_columns %}
+    {
+      name: '{{ c.name }}',
+      data_type: '{{ c.data_type }}',
+      length: '{{ c.length|default:"" }}',
+      notes: '{{ c.notes|default:"" }}'
+    },
+    {% endfor %}
+  ];
+
+  searchInput.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase().trim();
+    
+    if (searchTerm === '') {
+      resultsSelect.style.display = 'none';
+      return;
+    }
+
+    // Filtrar columnas que coincidan
+    const matches = availableColumns.filter(col => 
+      col.name.toLowerCase().includes(searchTerm) ||
+      col.data_type.toLowerCase().includes(searchTerm) ||
+      (col.notes && col.notes.toLowerCase().includes(searchTerm))
+    );
+
+    if (matches.length > 0) {
+      resultsSelect.innerHTML = '';
+      matches.forEach(col => {
+        const option = document.createElement('option');
+        option.value = col.name;
+        option.textContent = `${col.name} (${col.data_type}${col.length ? `(${col.length})` : ''})`;
+        resultsSelect.appendChild(option);
+      });
+      resultsSelect.style.display = 'block';
+    } else {
+      resultsSelect.style.display = 'none';
+    }
+  });
+
+  // Asignar directamente al hacer clic en el resultado
+  resultsSelect.addEventListener('change', function() {
+    const selectedColumn = this.value;
+    if (!selectedColumn) return;
+
+    const csrftoken = getCookie('csrftoken');
+    fetch('{% url "sapy:db_column_create" table.pk %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrftoken },
+      body: new URLSearchParams({ 'copy_from_name': selectedColumn }).toString()
+    }).then(async r => {
+      if (!r.ok) throw new Error(await r.text());
+      location.reload();
+    }).catch(err => alert('No se pudo asignar la columna: ' + (err && err.message ? err.message : 'Error')));
+  });
+
+  // Ocultar resultados al hacer clic fuera
+  document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !resultsSelect.contains(e.target)) {
+      resultsSelect.style.display = 'none';
+    }
+  });
+})();
+
+// Generar página desde esta DbTable
+(function(){
+  const btn = document.getElementById('btnGeneratePage');
+  if (!btn) return;
+  function getCookie(name){
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+  btn.addEventListener('click', async () => {
+    try{
+      showLoading('Generando página...');
+      const resp = await fetch('{% url "sapy:page_generate_from_dbtable" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ dbtable_id: {{ table.id }} })
+      });
+      const data = await resp.json();
+      hideLoading();
+      if (!resp.ok || !data.success){
+        showError(data.message || 'No se pudo generar la página');
+        return;
+      }
+      showSuccess('Página generada');
+      // Ir al detalle HTML de la página recién creada
+      window.location.href = '{% url "sapy:page_detail" 0 %}'.replace('/0/', '/' + data.page_id + '/');
+    }catch(e){
+      hideLoading();
+      showError(e && e.message ? e.message : 'Error inesperado');
+    }
+  });
+})();
+}catch(e){ console.warn('Detalle tabla: JS limitado por error', e); }
+</script>
+{% endblock %}
+{% endblock %}
+
+{# eliminado bloque extra_js duplicado #}
+

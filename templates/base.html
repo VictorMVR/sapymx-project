@@ -1,0 +1,286 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- CSS personalizado para formularios -->
+    <link rel="stylesheet" href="{% static 'css/form-grid.css' %}">
+    
+    <!-- CSS inline como respaldo -->
+    <style>
+    /* Sistema de Grid para Formularios basado en fracciones */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .form-grid .field {
+      min-height: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    
+    /* Fracciones del grid */
+    .field-1-1 { grid-column: span 12; }    /* 100% - Campo completo */
+    .field-1-2 { grid-column: span 6; }     /* 50% - Mitad */
+    .field-1-3 { grid-column: span 4; }     /* 33.33% - Un tercio */
+    .field-2-3 { grid-column: span 8; }     /* 66.66% - Dos tercios */
+    .field-1-4 { grid-column: span 3; }     /* 25% - Un cuarto */
+    .field-3-4 { grid-column: span 9; }     /* 75% - Tres cuartos */
+    .field-1-6 { grid-column: span 2; }     /* 16.66% - Un sexto */
+    .field-5-6 { grid-column: span 10; }    /* 83.33% - Cinco sextos */
+    
+    /* Responsive - en móviles todos los campos ocupan el ancho completo */
+    @media (max-width: 768px) {
+      .form-grid .field {
+        grid-column: span 12 !important;
+      }
+    }
+    
+    /* Estilos para campos del formulario */
+    .form-grid .field label {
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      color: #495057;
+    }
+    
+    .form-grid .field input,
+    .form-grid .field select,
+    .form-grid .field textarea {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #ced4da;
+      border-radius: 0.25rem;
+      font-size: 0.9rem;
+    }
+    
+    .form-grid .field input:focus,
+    .form-grid .field select:focus,
+    .form-grid .field textarea:focus {
+      border-color: #80bdff;
+      outline: 0;
+      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    /* Indicador visual de campo requerido */
+    .form-grid .field.required label::after {
+      content: " *";
+      color: #dc3545;
+      font-weight: bold;
+    }
+    
+    /* Estilos para el modal de previsualización */
+    .modal .form-grid {
+      margin-bottom: 0;
+    }
+    
+    .modal .form-grid .field {
+      min-height: 50px;
+    }
+    </style>
+    
+    <title>{% block title %}SAPY - Sistema Generador ERP{% endblock %}</title>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-boxes"></i> Sistema Generador ERP
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'sapy:application_list' %}">
+                            <i class="bi bi-grid-3x3-gap"></i> Aplicaciones
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'sapy:application_create' %}">
+                            <i class="bi bi-plus-circle"></i> Nueva App
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-database"></i> Esquema BD
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'sapy:db_table_list' %}">
+                                    <i class="bi bi-table"></i> Tablas BD
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'sapy:db_table_create' %}">
+                                    <i class="bi bi-plus-square"></i> Nueva Tabla BD
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'sapy:db_column_list' %}">
+                                    <i class="bi bi-list-columns"></i> Todas las Columnas
+                                </a>
+                            </li>
+                                                    <!-- Plantillas eliminadas - ya no son necesarias -->
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'sapy:pages_list' %}">
+                            <i class="bi bi-file-earmark-text"></i> Páginas
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    {% if user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> {{ user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="/admin/">Admin Django</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item">Cerrar Sesión</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mensajes -->
+    {% if messages %}
+    <div class="container-fluid mt-3">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+            {% if 'safe' in message.tags %}
+                {{ message|safe }}
+            {% else %}
+                {{ message }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Contenido -->
+    {% block content %}{% endblock %}
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- SweetAlert2 Utilities -->
+    <script>
+    // Configuración global de SweetAlert2
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true
+    });
+    
+    // Función para mostrar alertas de éxito
+    function showSuccess(message, title = '¡Éxito!') {
+        Toast.fire({
+            icon: 'success',
+            title: title,
+            text: message
+        });
+    }
+    
+    // Función para mostrar alertas de error
+    function showError(message, title = 'Error') {
+        Toast.fire({
+            icon: 'error',
+            title: title,
+            text: message
+        });
+    }
+    
+    // Función para mostrar alertas de advertencia
+    function showWarning(message, title = 'Advertencia') {
+        Toast.fire({
+            icon: 'warning',
+            title: title,
+            text: message
+        });
+    }
+    
+    // Función para mostrar alertas de información
+    function showInfo(message, title = 'Información') {
+        Toast.fire({
+            icon: 'info',
+            title: title,
+            text: message
+        });
+    }
+    
+    // Función para confirmaciones
+    function confirmAction(message, title = 'Confirmar') {
+        return Swal.fire({
+            title: title,
+            text: message,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Sí, continuar',
+            cancelButtonText: 'Cancelar'
+        });
+    }
+    
+    // Función para confirmaciones de eliminación
+    function confirmDelete(message, title = 'Confirmar Eliminación') {
+        return Swal.fire({
+            title: title,
+            text: message,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        });
+    }
+    
+    // Función para mostrar loading
+    function showLoading(message = 'Procesando...') {
+        Swal.fire({
+            title: message,
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+    }
+    
+    // Función para cerrar loading
+    function hideLoading() {
+        Swal.close();
+    }
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
