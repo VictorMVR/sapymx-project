@@ -2521,12 +2521,13 @@ def generate_django_model_for_table(application, table):
         # Asegurar permisos en app_base_dir y app_django_dir (no tocamos permisos de base_path del sistema)
         app_base_dir = f"{base_path}/{app_name}"
         app_django_dir = f"{app_base_dir}/{app_name}"
-        # 1) base_path: solo validar existencia y permisos básicos, sin corregir
-        if not os.path.isdir(base_path):
-            return {'success': False, 'error': f'Directorio base_path no existe: {base_path}'}
-        if not os.access(base_path, os.W_OK | os.X_OK):
-            return {'success': False, 'error': f'base_path no es escribible/ejecutable: {base_path}'}
-        # 2) app_base_dir
+        # 1) app_base_dir: si no existe, validar que base_path permita crearlo
+        if not os.path.isdir(app_base_dir):
+            if not os.path.isdir(base_path):
+                return {'success': False, 'error': f'Directorio base_path no existe: {base_path}'}
+            if not os.access(base_path, os.W_OK | os.X_OK):
+                return {'success': False, 'error': f'No se puede crear la carpeta de la app en base_path: {base_path} (sin permisos)'}
+        # Crear/asegurar app_base_dir escribible
         ok, err = _ensure_directory_writable(app_base_dir)
         if not ok:
             return {'success': False, 'error': err}
