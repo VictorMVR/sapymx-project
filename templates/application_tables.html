@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2><i class="bi bi-table text-primary"></i> {{ title }}</h2>
+      <p class="text-muted mb-0">
+        Gestiona las tablas de base de datos asignadas a esta aplicación
+      </p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url 'sapy:application_detail' application.pk %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver a Aplicación
+      </a>
+      <a href="{% url 'sapy:db_table_list' %}" class="btn btn-outline-info">
+        <i class="bi bi-table"></i> Ver Todas las Tablas
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Tablas Asignadas -->
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-check-circle text-success"></i> Tablas Asignadas
+            <span class="badge bg-success ms-2">{{ assigned_tables.count }}</span>
+          </h5>
+        </div>
+        <div class="card-body">
+          {% if assigned_tables %}
+            <!-- Resumen de estado -->
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-success me-2" id="implemented-count">0</span>
+                  <small class="text-muted">Implementadas</small>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-warning me-2" id="pending-count">0</span>
+                  <small class="text-muted">Pendientes</small>
+                </div>
+              </div>
+            </div>
+            
+            <div class="list-group list-group-flush">
+              {% for assignment in assigned_tables %}
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="mb-1">{{ assignment.table.name }}</h6>
+                    <small class="text-muted">
+                      Asignada el {{ assignment.assigned_at|date:"d/m/Y H:i" }}
+                      {% if assignment.is_generated %}
+                        • <span class="text-success">✓ Implementada</span>
+                        {% if assignment.record_count is not None %}
+                          • <strong>{{ assignment.record_count }}</strong> registros
+                        {% endif %}
+                      {% else %}
+                        • <span class="text-warning">⚠ Pendiente de implementar</span>
+                      {% endif %}
+                    </small>
+                    {% if assignment.notes %}
+                      <br><small class="text-muted">{{ assignment.notes|truncatechars:60 }}</small>
+                    {% endif %}
+                  </div>
+                  <div class="btn-group btn-group-sm">
+                    <a href="{% url 'sapy:application_table_detail' application.pk assignment.table.pk %}" 
+                       class="btn btn-outline-primary" title="Ver detalles">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                    
+                    <form method="post" class="d-inline" 
+                          onsubmit="return confirmModelGeneration(event, '{{ assignment.table.name }}');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="generate_model">
+                      <input type="hidden" name="table_id" value="{{ assignment.table.pk }}">
+                      <button type="submit" class="btn btn-outline-success" title="Generar/Regenerar modelo Django">
+                        <i class="bi bi-code-slash"></i> Generar
+                      </button>
+                    </form>
+                    
+                    <form method="post" class="d-inline" 
+                          onsubmit="return confirmUnassign(event, '{{ assignment.table.name }}');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="unassign">
+                      <input type="hidden" name="table_id" value="{{ assignment.table.pk }}">
+                      <button type="submit" class="btn btn-outline-danger" title="Desasignar tabla">
+                        <i class="bi bi-x-circle"></i>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-center py-4">
+              <i class="bi bi-table text-muted" style="font-size: 3rem;"></i>
+              <p class="text-muted mt-2">No hay tablas asignadas a esta aplicación</p>
+              <p class="text-muted small">Asigna tablas desde el buscador</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Buscador y Asignación -->
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-plus-circle text-info"></i> Asignar Nueva Tabla
+          </h5>
+        </div>
+        <div class="card-body">
+          <!-- Búsqueda -->
+          <form method="get" class="mb-3" onsubmit="return false;">
+            <div class="input-group">
+              <input id="live-search" type="text" class="form-control" name="search" 
+                     value="{{ search_query }}" placeholder="Buscar tabla...">
+              <button class="btn btn-outline-secondary" type="button" onclick="triggerLiveSearch()">
+                <i class="bi bi-search"></i>
+              </button>
+              <a href="{% url 'sapy:application_tables' application.pk %}" class="btn btn-outline-secondary d-none" id="clearSearchBtn">
+                <i class="bi bi-x-circle"></i>
+              </a>
+            </div>
+          </form>
+
+          <!-- Resultados en vivo -->
+          <div id="live-results"></div>
+          <div id="live-empty" class="text-center py-3 d-none">
+            <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+            <p class="text-muted mt-2">No se encontraron tablas</p>
+          </div>
+
+          {% if search_query and available_tables %}
+            <div class="list-group list-group-flush">
+              {% for table in available_tables %}
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="mb-1">{{ table.name }}</h6>
+                    <small class="text-muted">
+                      {{ table.table_columns.count }} columnas
+                      {% if table.description %}
+                        • {{ table.description|truncatechars:30 }}
+                      {% endif %}
+                    </small>
+                  </div>
+                  <form method="post" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="assign">
+                    <input type="hidden" name="table_id" value="{{ table.pk }}">
+                    <button type="submit" class="btn btn-outline-success btn-sm" title="Asignar tabla">
+                      <i class="bi bi-plus-circle"></i> Asignar
+                    </button>
+                  </form>
+                </div>
+              {% endfor %}
+            </div>
+          {% elif search_query and not available_tables %}
+            <div class="text-center py-3">
+              <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+              <p class="text-muted mt-2">No se encontraron tablas con "{{ search_query }}"</p>
+              <a href="{% url 'sapy:application_tables' application.pk %}" class="btn btn-outline-secondary btn-sm">
+                Limpiar búsqueda
+              </a>
+            </div>
+          {% else %}
+            <div class="text-center py-3">
+              <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+              <p class="text-muted">Busca tablas para asignar</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Contar elementos implementados y pendientes
+document.addEventListener('DOMContentLoaded', function() {
+    let implementedCount = 0;
+    let pendingCount = 0;
+    document.querySelectorAll('.text-success').forEach(function(element) {
+        if (element.textContent.includes('✓ Implementada')) implementedCount++;
+    });
+    document.querySelectorAll('.text-warning').forEach(function(element) {
+        if (element.textContent.includes('⚠ Pendiente')) pendingCount++;
+    });
+    document.getElementById('implemented-count').textContent = implementedCount;
+    document.getElementById('pending-count').textContent = pendingCount;
+
+    // Live search init
+    const input = document.getElementById('live-search');
+    if (input) {
+        input.addEventListener('input', debounce(performLiveSearch, 250));
+        // primera carga si hay valor
+        if (input.value.trim() !== '') performLiveSearch();
+    }
+});
+
+function triggerLiveSearch() { performLiveSearch(); }
+
+function debounce(fn, delay) {
+    let t; return function() { clearTimeout(t); t = setTimeout(() => fn.apply(this, arguments), delay); };
+}
+
+async function performLiveSearch() {
+    const input = document.getElementById('live-search');
+    const q = (input?.value || '').trim();
+    const resultsEl = document.getElementById('live-results');
+    const emptyEl = document.getElementById('live-empty');
+    const clearBtn = document.getElementById('clearSearchBtn');
+    if (!resultsEl) return;
+
+    if (!q) {
+        resultsEl.innerHTML = '';
+        emptyEl?.classList.add('d-none');
+        clearBtn?.classList.add('d-none');
+        return;
+    }
+
+    clearBtn?.classList.remove('d-none');
+
+    try {
+        const resp = await fetch('{% url "sapy:application_tables_search" application.pk %}?q=' + encodeURIComponent(q), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+        const rows = (data.results || []).map(renderResultRow).join('');
+        if (rows) {
+            resultsEl.innerHTML = `<div class="list-group list-group-flush">${rows}</div>`;
+            emptyEl?.classList.add('d-none');
+        } else {
+            resultsEl.innerHTML = '';
+            emptyEl?.classList.remove('d-none');
+        }
+    } catch (e) {
+        console.error('Live search error', e);
+    }
+}
+
+function renderResultRow(item) {
+    return `
+    <div class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <h6 class="mb-1">${escapeHtml(item.name)}</h6>
+        <small class="text-muted">${item.columns_count} columnas${item.description ? ' • ' + escapeHtml(item.description) : ''}</small>
+      </div>
+      <form method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign">
+        <input type="hidden" name="table_id" value="${item.id}">
+        <button type="submit" class="btn btn-outline-success btn-sm" title="Asignar tabla">
+          <i class="bi bi-plus-circle"></i> Asignar
+        </button>
+      </form>
+    </div>`;
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+
+// Confirmación para generación de modelo
+function confirmModelGeneration(event, tableName) {
+    event.preventDefault();
+    
+    Swal.fire({
+        title: 'Generar Modelo Django',
+        html: `
+            <p>¿Estás seguro de que quieres generar el modelo Django y crear la tabla <strong>${tableName}</strong> en la aplicación?</p>
+            <div class="alert alert-info mt-3">
+                <small>
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Proceso:</strong><br>
+                    • Se creará el modelo en models.py<br>
+                    • Se ejecutarán migraciones<br>
+                    • Se creará la tabla en la base de datos
+                </small>
+            </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-code-slash"></i> Generar Modelo',
+        cancelButtonText: 'Cancelar',
+        width: '500px'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Mostrar loading
+            showLoading('Generando modelo Django...');
+            
+            // Enviar formulario
+            event.target.closest('form').submit();
+        }
+    });
+    
+    return false;
+}
+
+// Confirmación para desasignar tabla
+function confirmUnassign(event, tableName) {
+    event.preventDefault();
+    
+    Swal.fire({
+        title: 'Desasignar Tabla',
+        text: `¿Estás seguro de que quieres desasignar la tabla "${tableName}" de esta aplicación?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-x-circle"></i> Desasignar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Enviar formulario
+            event.target.closest('form').submit();
+        }
+    });
+    
+    return false;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+  <h1>Bienvenido</h1>
+  <p>Esta es una landing básica de {{ request.get_host }}.</p>
+  {% if not user.is_authenticated %}
+    <p><a class="btn" href="/login/">Iniciar sesión</a></p>
+  {% else %}
+    <p>Ya has iniciado sesión como {{ user.username }}. Ve al <a href="/dashboard/">dashboard</a>.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Log de Deployment{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+      <i class="bi bi-journal-text me-2"></i>
+      Log de Deployment
+    </h4>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'sapy:application_detail' application.pk %}">
+      <i class="bi bi-arrow-left"></i> Regresar a la App
+    </a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between">
+      <div>
+        <strong>Aplicación:</strong> {{ application.display_name }}
+        <span class="text-muted">({{ application.name }})</span>
+      </div>
+      <div>
+        {% if log.completed_at %}
+          {% if log.success %}
+            <span class="badge bg-success"><i class="bi bi-check2-circle"></i> Exitoso</span>
+          {% else %}
+            <span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Error</span>
+          {% endif %}
+        {% else %}
+          <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> En progreso</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="mb-2 small text-muted">
+        <div><strong>Iniciado:</strong> {{ log.started_at|date:"d/m/Y H:i:s" }}</div>
+        {% if log.completed_at %}<div><strong>Finalizado:</strong> {{ log.completed_at|date:"d/m/Y H:i:s" }}</div>{% endif %}
+      </div>
+
+      <h6>Salida</h6>
+      <pre id="liveLog" class="bg-black text-light p-3 rounded" style="height: 420px; overflow: auto; white-space: pre-wrap;">{{ log.output|default:"" }}</pre>
+
+      {% if log.error_output %}
+      <h6 class="mt-3 text-danger">Errores</h6>
+      <pre id="liveErr" class="bg-dark text-danger p-3 rounded" style="height: 200px; overflow: auto; white-space: pre-wrap;">{{ log.error_output }}</pre>
+      {% else %}
+      <pre id="liveErr" class="d-none"></pre>
+      {% endif %}
+
+      {% if not log.completed_at %}
+      <div class="mt-3 text-muted small">Actualizando en tiempo real...</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if not log.completed_at %}
+<script>
+(function() {
+  const outEl = document.getElementById('liveLog');
+  const errEl = document.getElementById('liveErr');
+  const url = "{% url 'sapy:deployment_log_stream' application.pk log.pk %}";
+  function tick() {
+    fetch(url)
+      .then(r => r.json())
+      .then(j => {
+        if (outEl) {
+          outEl.textContent = j.output || '';
+          outEl.scrollTop = outEl.scrollHeight;
+        }
+        if (j.error_output) {
+          if (errEl) {
+            errEl.classList.remove('d-none');
+            errEl.textContent = j.error_output;
+            errEl.scrollTop = errEl.scrollHeight;
+          }
+        }
+        if (!j.completed_at) setTimeout(tick, 2000);
+        else console.log('Log completado');
+      })
+      .catch(() => setTimeout(tick, 4000));
+  }
+  tick();
+})();
+</script>
+{% endif %}
+{% endblock %}
+
+
+

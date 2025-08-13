@@ -1,0 +1,127 @@
+<!-- templates/sapy/application_list.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="bi bi-grid-3x3-gap-fill me-2"></i>
+                        Aplicaciones ERP Generadas
+                    </h4>
+                    <a href="{% url 'sapy:application_create' %}" class="btn btn-light btn-sm">
+                        <i class="bi bi-plus-circle me-1"></i>
+                        Nueva Aplicación
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if applications %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Aplicación</th>
+                                    <th>Dominio</th>
+                                    <th>Base de Datos</th>
+                                    <th>Estado</th>
+                                    <th>Creada</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for app in applications %}
+                                <tr>
+                                    <td>
+                                        <div>
+                                            <strong>{{ app.display_name }}</strong><br>
+                                            <small class="text-muted">{{ app.name }}</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a href="https://{{ app.domain }}/" target="_blank" class="text-decoration-none">
+                                            https://{{ app.domain }}
+                                            <i class="bi bi-box-arrow-up-right small"></i>
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <small>
+                                            <span class="badge bg-secondary">{{ app.db_engine }}</span>
+                                            {{ app.db_name }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if app.status == 'deployed' %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle"></i> Desplegada
+                                            </span>
+                                        {% elif app.status == 'installing' %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-hourglass-split"></i> Instalando...
+                                            </span>
+                                        {% elif app.status == 'error' %}
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-exclamation-triangle"></i> Error
+                                            </span>
+                                        {% elif app.status == 'draft' %}
+                                            <span class="badge bg-info">
+                                                <i class="bi bi-pencil"></i> En Diseño
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ app.get_status_display }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ app.created_at|date:"d/m/Y H:i" }}</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'sapy:application_detail' app.pk %}" 
+                                               class="btn btn-outline-primary" title="Ver detalles">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a href="{% url 'sapy:application_edit' app.pk %}" 
+                                               class="btn btn-outline-secondary" title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            {% if app.status == 'draft' or app.status == 'error' %}
+                                            <button type="button" class="btn btn-outline-success" 
+                                                    onclick="deployApp({{ app.pk }})" title="Instalar">
+                                                <i class="bi bi-play-circle"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox display-1 text-muted"></i>
+                        <p class="mt-3 text-muted">No hay aplicaciones registradas aún</p>
+                        <a href="{% url 'sapy:application_create' %}" class="btn btn-primary">
+                            <i class="bi bi-plus-circle me-1"></i>
+                            Crear Primera Aplicación
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function deployApp(appId) {
+    if (confirm('¿Estás seguro de que quieres instalar esta aplicación?')) {
+        window.location.href = `/applications/${appId}/`;
+    }
+}
+</script>
+{% endblock %}

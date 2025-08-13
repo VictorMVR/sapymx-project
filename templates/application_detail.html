@@ -1,0 +1,436 @@
+<!-- templates/sapy/application_detail.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Información Principal -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-app me-2"></i>
+                        {{ application.display_name }}
+                    </h5>
+                    <div>
+                        {% if application.status == 'deployed' %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Desplegada
+                            </span>
+                        {% elif application.status == 'installing' %}
+                            <span class="badge bg-warning">
+                                <i class="bi bi-hourglass-split"></i> Instalando...
+                            </span>
+                        {% elif application.status == 'error' %}
+                            <span class="badge bg-danger">
+                                <i class="bi bi-exclamation-triangle"></i> Error
+                            </span>
+                        {% else %}
+                            <span class="badge bg-info">{{ application.get_status_display }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Información Básica</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td class="fw-bold">Nombre Técnico:</td>
+                                    <td>{{ application.name }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">Dominio:</td>
+                                    <td>
+                                        <a href="http://{{ application.domain }}:{{ application.port }}" target="_blank">
+                                            {{ application.domain }}:{{ application.port }}
+                                            <i class="bi bi-box-arrow-up-right small"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">Ruta:</td>
+                                    <td><code>{{ application.get_full_path }}</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">Creada:</td>
+                                    <td>{{ application.created_at|date:"d/m/Y H:i" }}</td>
+                                </tr>
+                                {% if application.installed_at %}
+                                <tr>
+                                    <td class="fw-bold">Instalada:</td>
+                                    <td>{{ application.installed_at|date:"d/m/Y H:i" }}</td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Base de Datos</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td class="fw-bold">Motor:</td>
+                                    <td><span class="badge bg-secondary">{{ application.db_engine }}</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">Nombre BD:</td>
+                                    <td>{{ application.db_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">Host:</td>
+                                    <td>{{ application.db_host }}:{{ application.db_port }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">Usuario:</td>
+                                    <td>{{ application.db_user }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    {% if application.description %}
+                    <div class="mt-3">
+                        <h6 class="text-muted">Descripción</h6>
+                        <p>{{ application.description }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="btn-group" role="group">
+                        <a href="{% url 'sapy:application_edit' application.pk %}" class="btn btn-outline-primary">
+                            <i class="bi bi-pencil me-1"></i> Editar
+                        </a>
+                        <a href="{% url 'sapy:application_tables' application.pk %}" class="btn btn-outline-info">
+                            <i class="bi bi-table me-1"></i> Gestionar Tablas
+                        </a>
+                        {% if application.status == 'deployed' %}
+                        <a href="http://{{ application.domain }}:{{ application.port }}/admin/" target="_blank" class="btn btn-outline-success">
+                            <i class="bi bi-speedometer2 me-1"></i> Admin Django
+                        </a>
+                        {% endif %}
+                        <button type="button" class="btn btn-outline-danger" onclick="confirmDeleteApplication('{{ application.display_name }}')">
+                            <i class="bi bi-trash me-1"></i> Eliminar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Formulario oculto para eliminación -->
+            <form id="deleteForm" method="post" action="{% url 'sapy:application_delete' application.pk %}" style="display: none;">
+                {% csrf_token %}
+                <input type="hidden" name="confirm" value="yes">
+            </form>
+            
+            <!-- Tablas Asignadas -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">
+                        <i class="bi bi-table me-2"></i>
+                        Tablas de Base de Datos
+                        <span class="badge bg-info ms-2">{{ assigned_tables.count }}</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if assigned_tables %}
+                    <div class="list-group list-group-flush">
+                        {% for assignment in assigned_tables %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <div>
+                                <h6 class="mb-1">{{ assignment.table.name }}</h6>
+                                <small class="text-muted">
+                                    {{ assignment.table.table_columns.count }} columnas
+                                    {% if assignment.assigned_at %}
+                                        • Asignada el {{ assignment.assigned_at|date:"d/m/Y" }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            <a href="{% url 'sapy:application_table_detail' application.pk assignment.table.pk %}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3">
+                        <a href="{% url 'sapy:application_tables' application.pk %}" class="btn btn-outline-info btn-sm w-100">
+                            <i class="bi bi-gear"></i> Gestionar Todas las Tablas
+                        </a>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay tablas asignadas a esta aplicación</p>
+                    <a href="{% url 'sapy:application_tables' application.pk %}" class="btn btn-outline-info btn-sm w-100">
+                        <i class="bi bi-plus-circle"></i> Asignar Primera Tabla
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Logs de Deployment -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>
+                        Historial de Instalaciones
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if recent_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Tipo</th>
+                                    <th>Estado</th>
+                                    <th>Usuario</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in recent_logs %}
+                                <tr>
+                                    <td>{{ log.started_at|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ log.get_log_type_display }}</td>
+                                    <td>
+                                        {% if log.success %}
+                                            <span class="badge bg-success">Exitoso</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Error</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ log.executed_by.username|default:"-" }}</td>
+                                    <td>
+                                        <a href="{% url 'sapy:deployment_log_detail' application.pk log.pk %}" 
+                                           class="btn btn-sm btn-outline-info">
+                                            <i class="bi bi-eye"></i> Ver
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay registros de instalación</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <!-- Panel de Instalación -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="bi bi-rocket-takeoff me-2"></i>
+                        Instalación Rápida
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if application.status == 'draft' or application.status == 'error' %}
+                    <form method="post" action="{% url 'sapy:application_deploy' application.pk %}" id="deployForm">
+                        {% csrf_token %}
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Este proceso creará:
+                            <ul class="mb-0 mt-2">
+                                <li>Estructura de carpetas</li>
+                                <li>Entorno virtual Python</li>
+                                <li>Base de datos</li>
+                                <li>Proyecto Django</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ deploy_form.confirm }}
+                                <label class="form-check-label" for="{{ deploy_form.confirm.id_for_label }}">
+                                    {{ deploy_form.confirm.label }}
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ deploy_form.create_superuser }}
+                                <label class="form-check-label" for="{{ deploy_form.create_superuser.id_for_label }}">
+                                    {{ deploy_form.create_superuser.label }}
+                                </label>
+                                <small class="text-muted d-block">{{ deploy_form.create_superuser.help_text }}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ deploy_form.run_migrations }}
+                                <label class="form-check-label" for="{{ deploy_form.run_migrations.id_for_label }}">
+                                    {{ deploy_form.run_migrations.label }}
+                                </label>
+                                <small class="text-muted d-block">{{ deploy_form.run_migrations.help_text }}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ deploy_form.install_sample_data }}
+                                <label class="form-check-label" for="{{ deploy_form.install_sample_data.id_for_label }}">
+                                    {{ deploy_form.install_sample_data.label }}
+                                </label>
+                                <small class="text-muted d-block">{{ deploy_form.install_sample_data.help_text }}</small>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success w-100" id="deployBtn">
+                            <i class="bi bi-play-circle me-1"></i>
+                            Instalar Aplicación
+                        </button>
+                    </form>
+                    
+                    {% elif application.status == 'installing' %}
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Instalando...</span>
+                        </div>
+                        <p>Instalación en progreso...</p>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                        <small class="text-muted d-block mt-2">Este proceso puede tomar varios minutos</small>
+                    </div>
+                    
+                    {% elif application.status == 'deployed' %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+                        <h6 class="text-success mt-2">Aplicación Instalada</h6>
+                        <p class="text-muted small">La aplicación está lista para usar</p>
+                        
+                        <div class="mt-3">
+                            <a href="http://{{ application.domain }}:{{ application.port }}/" target="_blank" 
+                               class="btn btn-success btn-sm">
+                                <i class="bi bi-box-arrow-up-right"></i> Abrir Aplicación
+                            </a>
+                        </div>
+                        
+                        <div class="mt-2">
+                            <a href="http://{{ application.domain }}:{{ application.port }}/admin/" target="_blank" 
+                               class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-speedometer2"></i> Admin Django
+                            </a>
+                        </div>
+                    </div>
+                    
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-info-circle text-info" style="font-size: 3rem;"></i>
+                        <p class="text-muted">Estado: {{ application.get_status_display }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Información Técnica -->
+                {% if application.status == 'deployed' %}
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">
+                            <i class="bi bi-terminal me-2"></i>
+                            Comandos Útiles
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <small class="text-muted">Activar entorno virtual:</small>
+                            <div class="bg-light p-2 rounded">
+                                <code>source {{ application.get_venv_path }}/bin/activate</code>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <small class="text-muted">Ejecutar servidor:</small>
+                            <div class="bg-light p-2 rounded">
+                                <code>python manage.py runserver {{ application.port }}</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación para eliminar -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que quieres eliminar la aplicación <strong>{{ application.display_name }}</strong>?</p>
+                <p class="text-danger">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <form method="post" action="{% url 'sapy:application_delete' application.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="confirm" value="yes">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Confirmación de eliminación
+function confirmDeleteApplication(applicationName) {
+    Swal.fire({
+        title: '¿Estás seguro?',
+        text: `¿Estás seguro de que quieres eliminar la aplicación "${applicationName}"? Esta acción no se puede deshacer.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Submit the form
+            document.getElementById('deleteForm').submit();
+        }
+    });
+}
+
+// Auto-actualizar estado si está instalando
+{% if application.status == 'installing' %}
+setInterval(function() {
+    fetch("{% url 'sapy:application_status' application.pk %}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status !== 'installing') {
+                location.reload();
+            }
+        });
+}, 5000);  // Verificar cada 5 segundos
+{% endif %}
+
+// Validación del formulario de deploy
+document.getElementById('deployForm')?.addEventListener('submit', function(e) {
+    const confirmCheck = document.getElementById('id_confirm');
+    if (!confirmCheck.checked) {
+        e.preventDefault();
+        alert('Debes confirmar que quieres instalar la aplicación');
+        return false;
+    }
+    
+    document.getElementById('deployBtn').disabled = true;
+    document.getElementById('deployBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Instalando...';
+});
+</script>
+{% endblock %}

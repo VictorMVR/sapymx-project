@@ -1,0 +1,540 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div>
+      <a class="btn btn-outline-secondary" href="{% url 'sapy:pages_list' %}"><i class="bi bi-arrow-left"></i> Volver</a>
+      <a class="btn btn-primary" target="_blank" href="{% url 'sapy:page_effective_config' page.id %}"><i class="bi bi-braces"></i> Ver JSON</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" action="{% url 'sapy:page_update' page.id %}" class="row g-3">
+        {% csrf_token %}
+        <div class="col-12 col-md-3"><div class="text-muted small">Slug</div><code>{{ page.slug }}</code></div>
+        <div class="col-12 col-md-3">
+          <label class="form-label small">Título</label>
+          <input type="text" name="title" class="form-control" value="{{ page.title }}">
+        </div>
+        <div class="col-12 col-md-3"><div class="text-muted small">Tipo</div>{{ page.get_source_type_display }}</div>
+        <div class="col-12 col-md-3"><div class="text-muted small">Ruta</div><code>{{ page.route_path }}</code></div>
+        <div class="col-12 col-md-3"><div class="text-muted small">Tabla BD</div>{% if page.db_table %}{{ page.db_table.name }}{% else %}-{% endif %}</div>
+        <div class="col-12">
+          <button class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+          <a class="btn btn-outline-primary" target="_blank" href="{% url 'sapy:page_effective_config' page.id %}"><i class="bi bi-braces"></i> Ver JSON</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if page_table %}
+  <div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center gap-2 w-100">
+        <strong>Tabla en página</strong>
+        <input type="text" class="form-control form-control-sm ms-3" id="pageTableTitle" value="{{ page_table.title|default:page.title }}" placeholder="Título de la tabla" style="max-width: 320px;">
+        <button class="btn btn-sm btn-outline-primary" id="btnSaveTableTitle"><i class="bi bi-save"></i></button>
+        <div class="ms-auto small text-muted">{{ page_table.db_table.name }}</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle" id="pageColumnsTable">
+          <thead>
+            <tr>
+              <th>Columna</th>
+              <th>Título</th>
+              <th>Visible</th>
+              <th>Alineación</th>
+              <th>Formato</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tc in db_columns %}
+            <tr draggable="true" data-col-id="{{ tc.id }}">
+              <td class="col-pos">{{ tc.position }}</td>
+              <td><code>{{ tc.column.name }}</code></td>
+              <td>
+                <input type="text" class="form-control form-control-sm col-title" data-col-id="{{ tc.column.id }}" placeholder="(default UI/DB)" />
+              </td>
+              <td>
+                <select class="form-select form-select-sm col-visible" data-col-id="{{ tc.column.id }}">
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </td>
+              <td>
+                <select class="form-select form-select-sm col-align" data-col-id="{{ tc.column.id }}">
+                  <option value="">(auto)</option>
+                  <option value="left">left</option>
+                  <option value="center">center</option>
+                  <option value="right">right</option>
+                </select>
+              </td>
+              <td>
+                <select class="form-select form-select-sm col-format" data-col-id="{{ tc.column.id }}">
+                  <option value="">(auto)</option>
+                  <option value="currency">currency</option>
+                  <option value="decimal">decimal</option>
+                  <option value="percent">percent</option>
+                  <option value="date">date</option>
+                  <option value="datetime">datetime</option>
+                  <option value="badge">badge</option>
+                  <option value="link">link</option>
+                  <option value="button">button</option>
+                </select>
+              </td>
+              <td class="text-end">
+                <button class="btn btn-sm btn-outline-primary btn-save-col" data-col-id="{{ tc.column.id }}">
+                  <i class="bi bi-save"></i> Guardar
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card mt-3">
+    <div class="card-header"><strong>Modales</strong></div>
+    <div class="card-body">
+      {% for pm in modals %}
+      <form method="post" action="{% url 'sapy:modal_update' pm.modal.id %}" class="border rounded p-3 mb-3 modal-section">
+        {% csrf_token %}
+        <input type="hidden" name="page_id" value="{{ page.id }}" />
+        <input type="hidden" name="modal_id" value="{{ pm.modal.id }}" />
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-4">
+            <label class="form-label small">Título</label>
+            <input name="title" class="form-control" value="{{ pm.modal.title }}" />
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small">Tamaño</label>
+            <select name="size" class="form-select">
+              <option value="sm" {% if pm.modal.size == 'sm' %}selected{% endif %}>sm</option>
+              <option value="md" {% if pm.modal.size == 'md' %}selected{% endif %}>md</option>
+              <option value="lg" {% if pm.modal.size == 'lg' %}selected{% endif %}>lg</option>
+              <option value="xl" {% if pm.modal.size == 'xl' %}selected{% endif %}>xl</option>
+              <option value="full" {% if pm.modal.size == 'full' %}selected{% endif %}>full</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small">Backdrop</label>
+            <select name="close_on_backdrop" class="form-select">
+              <option value="true" {% if pm.modal.close_on_backdrop %}selected{% endif %}>True</option>
+              <option value="false" {% if not pm.modal.close_on_backdrop %}selected{% endif %}>False</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small">Escape</label>
+            <select name="close_on_escape" class="form-select">
+              <option value="true" {% if pm.modal.close_on_escape %}selected{% endif %}>True</option>
+              <option value="false" {% if not pm.modal.close_on_escape %}selected{% endif %}>False</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small">Prevent ENTER</label>
+            <select name="prevent_close_on_enter" class="form-select">
+              <option value="true" {% if pm.modal.prevent_close_on_enter %}selected{% endif %}>True</option>
+              <option value="false" {% if not pm.modal.prevent_close_on_enter %}selected{% endif %}>False</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small">Prevent SPACE</label>
+            <select name="prevent_close_on_space" class="form-select">
+              <option value="true" {% if pm.modal.prevent_close_on_space %}selected{% endif %}>True</option>
+              <option value="false" {% if not pm.modal.prevent_close_on_space %}selected{% endif %}>False</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small">Botón Guardar</label>
+            <input name="submit_button_label" class="form-control" value="{{ pm.modal.submit_button_label }}" />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small">Botón Cancelar</label>
+            <input name="cancel_button_label" class="form-control" value="{{ pm.modal.cancel_button_label }}" />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small">Modo de Formulario</label>
+            <select name="form_mode" class="form-select">
+              <option value="none" {% if pm.modal.form_mode == 'none' %}selected{% endif %}>Sin formulario</option>
+              <option value="auto" {% if pm.modal.form_mode == 'auto' %}selected{% endif %}>Formulario automático</option>
+              <option value="external" {% if pm.modal.form_mode == 'external' %}selected{% endif %}>Formulario externo</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label small">Plantilla externa (si modo = externo)</label>
+            <input name="external_template_path" class="form-control" value="{{ pm.modal.external_template_path }}" placeholder="templates/path/file.html" />
+          </div>
+          <div class="col-12 col-md-3 d-grid">
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPreview-{{ pm.modal.id }}">
+              <i class="bi bi-eye"></i> Previsualizar
+            </button>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-outline-primary"><i class="bi bi-save"></i> Guardar modal</button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Modal de previsualización -->
+      <div class="modal fade" id="modalPreview-{{ pm.modal.id }}" tabindex="-1"
+           data-bs-backdrop="{% if pm.modal.close_on_backdrop %}true{% else %}static{% endif %}"
+           data-bs-keyboard="{% if pm.modal.close_on_escape %}true{% else %}false{% endif %}">
+        <div class="modal-dialog {% if pm.modal.size == 'sm' %}modal-sm{% elif pm.modal.size == 'md' %}{% elif pm.modal.size == 'lg' %}modal-lg{% elif pm.modal.size == 'xl' %}modal-xl{% elif pm.modal.size == 'full' %}modal-fullscreen{% endif %}">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ pm.modal.title }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+                          <div class="modal-body">
+                {% if pm.computed_fields %}
+                <div class="form-grid">
+                  {% for f in pm.computed_fields %}
+                  {% if f.visible %}
+                  <div class="field field-{{ f.width_fraction|default:'1-1' }} {% if f.required %}required{% endif %}" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}">
+                    <label class="form-label">{{ f.label }}</label>
+                    <input class="form-control" placeholder="{{ f.placeholder }}" {% if f.required %}required{% endif %} />
+                  </div>
+                  {% endif %}
+                  {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted">Sin formulario configurado</div>
+                {% endif %}
+              </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ pm.modal.cancel_button_label }}</button>
+              <button type="button" class="btn btn-primary">{{ pm.modal.submit_button_label }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if pm.computed_fields %}
+      <div class="border rounded p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong>Formulario (vista previa)</strong>
+          <span class="text-muted small">{{ pm.modal.form_mode|default:'auto' }}</span>
+        </div>
+        <div class="form-grid">
+          {% for f in pm.computed_fields %}
+          {% if f.visible %}
+                  <div class="field field-{{ f.width_fraction|default:'1-1' }} {% if f.required %}required{% endif %}" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}">
+            <label class="form-label">{{ f.label }}</label>
+            <input class="form-control" placeholder="{{ f.placeholder }}" {% if f.required %}required{% endif %} />
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <hr/>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Campo</th>
+                <th>Label</th>
+                <th>Placeholder</th>
+                <th>Ancho</th>
+                <th>Requerido</th>
+                <th>Visible</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in pm.computed_fields %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                <td><code>{{ f.name }}</code></td>
+                <td><input class="form-control form-control-sm q-label" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}" value="{{ f.label }}" /></td>
+                <td><input class="form-control form-control-sm q-ph" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}" value="{{ f.placeholder }}" /></td>
+                <td>
+                  {% with wf=f.width_fraction|default:'1-1' %}
+                  <select class="form-select form-select-sm q-width" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}">
+                    <option value="1-1" {% if wf == '1-1' %}selected{% endif %}>1/1 (100%)</option>
+                    <option value="1-2" {% if wf == '1-2' %}selected{% endif %}>1/2 (50%)</option>
+                    <option value="1-3" {% if wf == '1-3' %}selected{% endif %}>1/3 (33%)</option>
+                    <option value="2-3" {% if wf == '2-3' %}selected{% endif %}>2/3 (67%)</option>
+                    <option value="1-4" {% if wf == '1-4' %}selected{% endif %}>1/4 (25%)</option>
+                    <option value="3-4" {% if wf == '3-4' %}selected{% endif %}>3/4 (75%)</option>
+                    <option value="1-6" {% if wf == '1-6' %}selected{% endif %}>1/6 (17%)</option>
+                    <option value="5-6" {% if wf == '5-6' %}selected{% endif %}>5/6 (83%)</option>
+                  </select>
+                  {% endwith %}
+                </td>
+                <td>
+                  <select class="form-select form-select-sm q-req" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}">
+                    <option value="true" {% if f.required %}selected{% endif %}>Sí</option>
+                    <option value="false" {% if not f.required %}selected{% endif %}>No</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="form-select form-select-sm q-vis" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}">
+                    <option value="true" {% if f.visible %}selected{% endif %}>Sí</option>
+                    <option value="false" {% if not f.visible %}selected{% endif %}>No</option>
+                  </select>
+                </td>
+                <td class="text-end">
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-save-q" data-fq="{{ f.fq_id }}" data-dbc="{{ f.db_col_id }}" data-order="{{ f.order_index }}">
+                    <i class="bi bi-save"></i> Guardar
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+      {% empty %}
+      <div class="text-muted">Sin modales</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const tableId = {{ page_table.id|default:'null' }};
+  if (!tableId) return;
+  function post(url, data){
+    const form = new FormData();
+    Object.entries(data).forEach(([k,v]) => form.append(k, v));
+    return fetch(url, { method: 'POST', headers: { 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '' }, body: form })
+      .then(r => r.json());
+  }
+  document.querySelectorAll('.btn-save-col').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const colId = btn.getAttribute('data-col-id');
+      const title = document.querySelector('.col-title[data-col-id="'+colId+'"]').value;
+      const vis = document.querySelector('.col-visible[data-col-id="'+colId+'"]').value;
+      const align = document.querySelector('.col-align[data-col-id="'+colId+'"]').value;
+      const fmt = document.querySelector('.col-format[data-col-id="'+colId+'"]').value;
+      try{
+        const res = await post('{% url "sapy:page_table_column_override_save" 0 %}'.replace('/0/', '/' + tableId + '/'), {
+          db_column_id: colId,
+          title_override: title,
+          visible: vis,
+          alignment: align,
+          format: fmt
+        });
+        if (!res.success) alert(res.message || 'Error');
+      }catch(e){ alert('Error'); }
+    });
+  });
+
+  // Guardar título de la tabla
+  const btnSaveTableTitle = document.getElementById('btnSaveTableTitle');
+  if (btnSaveTableTitle){
+    btnSaveTableTitle.addEventListener('click', async () => {
+      try{
+        const res = await post('{% url "sapy:page_update" page.id %}', { table_title: document.getElementById('pageTableTitle').value });
+        if (!res.success){ location.reload(); }
+      }catch(e){ location.reload(); }
+    });
+  }
+
+  // Reordenamiento: drag & drop + botones
+  const reorderUrl = {% if page_table %}'{% url "sapy:db_table_reorder" page_table.db_table.id %}'{% else %}null{% endif %};
+  function sendOrder(){
+    if (!reorderUrl) return;
+    const ids = Array.from(document.querySelectorAll('tr[data-col-id]')).map(tr => parseInt(tr.getAttribute('data-col-id')));
+    fetch(reorderUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '' },
+      body: JSON.stringify({ order: ids })
+    });
+  }
+
+  const tbody = document.querySelector('#pageColumnsTable tbody');
+  if (tbody){
+    let dragging = null;
+    tbody.addEventListener('dragstart', (e) => {
+      const tr = e.target.closest('tr[data-col-id]');
+      if (!tr) return;
+      dragging = tr;
+      tr.classList.add('table-active');
+      if (e.dataTransfer){ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', tr.getAttribute('data-col-id')); }
+    });
+    tbody.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const tr = e.target.closest('tr[data-col-id]');
+      if (!dragging || !tr || tr === dragging) return;
+      const rect = tr.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      tbody.insertBefore(dragging, after ? tr.nextSibling : tr);
+      Array.from(document.querySelectorAll('td.col-pos')).forEach((td, idx) => td.textContent = String(idx+1));
+    });
+    tbody.addEventListener('dragend', () => { if (dragging){ dragging.classList.remove('table-active'); dragging=null; sendOrder(); }});
+  }
+})();
+</script>
+
+<script>
+// Guardar overrides de preguntas
+(function(){
+  function post(url, data){
+    const form = new FormData(); Object.entries(data).forEach(([k,v]) => form.append(k,v));
+    return fetch(url, { method:'POST', headers:{ 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '' }, body: form }).then(r=>r.json());
+  }
+  document.querySelectorAll('.btn-save-q').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const fq = btn.getAttribute('data-fq');
+      const dbc = btn.getAttribute('data-dbc');
+      const order = btn.getAttribute('data-order') || '1';
+      const rowSel = `[data-fq="${fq}"][data-dbc="${dbc}"]`;
+      const label = document.querySelector('.q-label' + rowSel).value;
+      const ph = document.querySelector('.q-ph' + rowSel).value;
+      const width = document.querySelector('.q-width' + rowSel).value;
+      const req = document.querySelector('.q-req' + rowSel).value;
+      const vis = document.querySelector('.q-vis' + rowSel).value;
+      // Buscar el modal asociado a este formulario
+      const modalRow = btn.closest('.modal-section');
+      let modalId = null;
+      if (modalRow) {
+        const hiddenField = modalRow.querySelector('[name="modal_id"]');
+        modalId = hiddenField ? hiddenField.value : null;
+      }
+      // Si no se encuentra, buscar en el contexto de la página
+      if (!modalId) {
+        const modalSection = btn.closest('.card-body');
+        if (modalSection) {
+          const modalForm = modalSection.querySelector('form.modal-section');
+          if (modalForm) {
+            const hiddenField = modalForm.querySelector('[name="modal_id"]');
+            modalId = hiddenField ? hiddenField.value : null;
+          }
+        }
+      }
+      if (!modalId){ 
+        console.error('Modal no encontrado para botón:', btn);
+        console.error('Modal section encontrada:', btn.closest('.modal-section'));
+        alert('Modal no encontrado. Revisa la consola para más detalles.'); 
+        return; 
+      }
+      const payload = {
+        form_question_id: fq || '',
+        db_column_id: dbc || '',
+        label_override: label,
+        placeholder: ph,
+        width_fraction: width,
+        required_override: req,
+        visible: vis,
+        order_index: order
+      };
+      
+      // Debug: mostrar en consola qué se está enviando
+      console.log('Enviando payload:', payload);
+      console.log('width_fraction:', width);
+      console.log('modalId:', modalId);
+      
+      const saveUrl = '{% url "sapy:modal_form_field_override_save" 0 %}'.replace('/0/', '/' + modalId + '/');
+      const res = await post(saveUrl, payload);
+      if (!res.success) {
+        alert(res.message || 'Error');
+        return;
+      }
+      
+      // Actualizar el modal de previsualización con los nuevos valores
+      updateModalPreview(modalId, {
+        label: label,
+        placeholder: ph,
+        required: req === 'true',
+        visible: vis === 'true',
+        widthFraction: width,
+        fqId: fq,
+        dbColId: dbc
+      });
+      
+      // Mostrar mensaje de éxito con SweetAlert (sin confirmación)
+      Swal.fire({
+        icon: 'success',
+        title: '¡Campo actualizado!',
+        text: 'Los cambios se han guardado correctamente',
+        showConfirmButton: false,
+        timer: 2000,
+        toast: true,
+        position: 'top-end'
+      });
+    });
+  });
+  
+  // Función para actualizar el modal de previsualización
+  function updateModalPreview(modalId, fieldData) {
+    const modal = document.getElementById(`modalPreview-${modalId}`);
+    if (!modal) return;
+    
+    // Actualizar el título del modal si se cambió el label
+    if (fieldData.label) {
+      const modalTitle = modal.querySelector('.modal-title');
+      if (modalTitle) {
+        modalTitle.textContent = fieldData.label;
+      }
+    }
+    
+    // Actualizar los campos del formulario usando el nuevo sistema de fracciones
+    const formFields = modal.querySelectorAll('.modal-body .field');
+    formFields.forEach(field => {
+      const label = field.querySelector('label');
+      const input = field.querySelector('input, select, textarea');
+
+      // Identificar si este field corresponde al que se editó, si tenemos fqId o dbColId
+      let isTarget = true;
+      if (fieldData.fqId || fieldData.dbColId){
+        const fFq = field.getAttribute('data-fq');
+        const fDbc = field.getAttribute('data-dbc');
+        isTarget = (
+          (fieldData.fqId && fFq && String(fieldData.fqId) === String(fFq)) ||
+          (fieldData.dbColId && fDbc && String(fieldData.dbColId) === String(fDbc))
+        );
+      }
+      
+      if (isTarget && label && fieldData.label) {
+        label.textContent = fieldData.label;
+      }
+      
+      if (isTarget && input && fieldData.placeholder) {
+        input.placeholder = fieldData.placeholder;
+      }
+      
+      // Marcar como requerido si es necesario
+      if (isTarget && input && fieldData.required !== undefined) {
+        if (fieldData.required) {
+          input.setAttribute('required', 'required');
+          field.classList.add('required');
+        } else {
+          input.removeAttribute('required');
+          field.classList.remove('required');
+        }
+      }
+      
+      // Mostrar/ocultar campo según visibilidad
+      if (isTarget && fieldData.visible !== undefined) {
+        field.style.display = fieldData.visible ? 'block' : 'none';
+      }
+
+      // Actualizar ancho (widthFraction) si se envió
+      if (isTarget && fieldData.widthFraction){
+        // Remover clases previas field-*
+        field.className = field.className
+          .split(' ')
+          .filter(cls => !cls.startsWith('field-') || cls === 'field')
+          .join(' ');
+        field.classList.add(`field-${fieldData.widthFraction}`);
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}
+

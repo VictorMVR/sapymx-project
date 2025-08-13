@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2><i class="bi bi-table text-primary"></i> {{ table.name }}</h2>
+      <p class="text-muted mb-0">
+        Detalles de la tabla en la aplicación {{ application.display_name }}
+      </p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url 'sapy:application_tables' application.pk %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver a Tablas
+      </a>
+      <a href="{% url 'sapy:db_table_detail' table.pk %}" class="btn btn-outline-info">
+        <i class="bi bi-table"></i> Ver Tabla Completa
+      </a>
+    </div>
+  </div>
+
+  <!-- Información de la asignación -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-info-circle text-info"></i> Información de Asignación
+          </h5>
+        </div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Aplicación:</dt>
+            <dd class="col-sm-8">{{ application.display_name }}</dd>
+            
+            <dt class="col-sm-4">Tabla:</dt>
+            <dd class="dd class="col-sm-8"><code>{{ table.name }}</code></dd>
+            
+            <dt class="col-sm-4">Asignada:</dt>
+            <dd class="col-sm-8">{{ assignment.assigned_at|date:"d/m/Y H:i" }}</dd>
+            
+            {% if assignment.notes %}
+              <dt class="col-sm-4">Notas:</dt>
+              <dd class="col-sm-8">{{ assignment.notes }}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-table text-secondary"></i> Información de la Tabla
+          </h5>
+        </div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Descripción:</dt>
+            <dd class="col-sm-8">
+              {% if table.description %}
+                {{ table.description }}
+              {% else %}
+                <span class="text-muted">Sin descripción</span>
+              {% endif %}
+            </dd>
+            
+            <dt class="col-sm-4">Columnas:</dt>
+            <dd class="col-sm-8">{{ table_columns.count }}</dd>
+            
+            <dt class="col-sm-4">Estado:</dt>
+            <dd class="col-sm-8">
+              {% if table.activo %}
+                <span class="badge bg-success">Activa</span>
+              {% else %}
+                <span class="badge bg-danger">Inactiva</span>
+              {% endif %}
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Columnas de la tabla -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="card-title mb-0">
+        <i class="bi bi-list-columns text-primary"></i> Columnas de la Tabla
+        <span class="badge bg-primary ms-2">{{ table_columns.count }}</span>
+      </h5>
+    </div>
+    <div class="card-body p-0">
+      {% if table_columns %}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Posición</th>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th>Propiedades</th>
+                <th>Default</th>
+                <th>Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for table_column in table_columns %}
+                <tr>
+                  <td>
+                    <span class="badge bg-secondary">{{ table_column.position }}</span>
+                  </td>
+                  <td>
+                    <strong>{{ table_column.column.name }}</strong>
+                  </td>
+                  <td>
+                    <span class="badge bg-info">{{ table_column.column.data_type|upper }}</span>
+                    {% if table_column.column.length %}({{ table_column.column.length }}){% endif %}
+                    {% if table_column.column.numeric_precision %}({{ table_column.column.numeric_precision }}{% if table_column.column.numeric_scale %},{{ table_column.column.numeric_scale }}{% endif %}){% endif %}
+                  </td>
+                  <td>
+                    {% if table_column.is_primary_key %}<span class="badge bg-warning text-dark me-1">PK</span>{% endif %}
+                    {% if table_column.is_unique %}<span class="badge bg-info me-1">Único</span>{% endif %}
+                    {% if table_column.is_index %}<span class="badge bg-success me-1">Índice</span>{% endif %}
+                    {% if not table_column.is_nullable %}<span class="badge bg-danger me-1">No Nulo</span>{% endif %}
+                    {% if table_column.is_auto_increment %}<span class="badge bg-primary me-1">Auto Inc</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if table_column.default_value %}
+                      <code class="text-muted">{{ table_column.default_value|truncatechars:20 }}</code>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if table_column.notes %}
+                      <span class="text-muted" title="{{ table_column.notes }}">{{ table_column.notes|truncatechars:30 }}</span>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-4">
+          <i class="bi bi-list-columns text-muted" style="font-size: 3rem;"></i>
+          <p class="text-muted mt-2">Esta tabla no tiene columnas definidas</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Acciones futuras -->
+  <div class="card mt-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="bi bi-gear text-warning"></i> Acciones Futuras
+      </h5>
+      <div class="row">
+        <div class="col-md-6">
+          <h6>Generación de Código:</h6>
+          <ul class="small">
+            <li>Modelos Django para esta tabla</li>
+            <li>Migraciones de base de datos</li>
+            <li>Vistas y formularios básicos</li>
+            <li>URLs y navegación</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <h6>Implementación:</h6>
+          <ul class="small">
+            <li>Crear tablas en BD de la aplicación</li>
+            <li>Generar código en el directorio de la app</li>
+            <li>Configurar Django settings</li>
+            <li>Ejecutar migraciones</li>
+          </ul>
+        </div>
+      </div>
+      <div class="alert alert-warning mt-3">
+        <i class="bi bi-clock"></i>
+        <strong>En desarrollo:</strong> Estas funcionalidades estarán disponibles próximamente 
+        para automatizar completamente la generación de aplicaciones Django basadas en las tablas asignadas.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

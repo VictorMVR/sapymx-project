@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load ui_extras %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <a class="btn btn-outline-secondary" href="{% url 'sapy:db_table_detail' table.pk %}">← Volver</a>
+  </div>
+
+  <div class="card">
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-striped align-middle mb-0" id="dataTable">
+        <thead>
+          <tr>
+            {% for c in columns %}
+              <th>{{ c.label }}</th>
+            {% endfor %}
+            {% if has_activo %}<th class="text-end">Acciones</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr data-row-id="{{ row.id }}">
+            {% for c in columns %}
+              {% if c.is_toggle %}
+                <td class="text-center"><span class="badge {{ row.activo|yesno:'bg-success,bg-secondary' }}">{{ row.activo|yesno:'Activo,Inactivo' }}</span></td>
+              {% else %}
+                <td>{{ row|get_item:c.name }}</td>
+              {% endif %}
+            {% endfor %}
+            {% if has_activo %}
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-outline-primary btn-toggle">Alternar</button>
+            </td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="99" class="text-center p-4 text-muted">Sin datos</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('.btn-toggle');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const rowId = row && row.getAttribute('data-row-id');
+  if (!rowId) return;
+  btn.disabled = true;
+  fetch(`{% url 'sapy:db_table_toggle_activo' table.pk 0 %}`.replace('/0/', `/${rowId}/`), {
+    method: 'POST',
+    headers: { 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '' }
+  }).then(r => r.json()).then(j => {
+    if (j && j.success){
+      const badge = row.querySelector('span.badge');
+      if (badge){
+        badge.textContent = j.activo ? 'Activo' : 'Inactivo';
+        badge.className = 'badge ' + (j.activo ? 'bg-success' : 'bg-secondary');
+      }
+    } else {
+      alert('No se pudo alternar: ' + (j && j.message ? j.message : 'Error'));
+    }
+  }).catch(() => alert('Error de red')).finally(() => btn.disabled = false);
+});
+</script>
+{% endblock %}
+{% endblock %}
+

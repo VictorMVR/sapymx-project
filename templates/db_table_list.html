@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div>
+      <a class="btn btn-primary w-100 w-md-auto" href="{% url 'sapy:db_table_create' %}">
+        <i class="bi bi-plus-square"></i> Nueva Tabla BD
+      </a>
+    </div>
+  </div>
+
+  <!-- Vista móvil: tarjetas -->
+  <div class="d-block d-md-none">
+    {% for t in tables %}
+    <div class="card mb-2">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <div class="text-muted small">Esquema</div>
+            <div><code>{{ t.schema_name|default:'public' }}</code></div>
+          </div>
+          <div class="text-end">
+            <span class="badge bg-secondary">{{ t.get_table_kind_display }}</span>
+          </div>
+        </div>
+        <div class="mb-1">
+          <div class="text-muted small">Tabla</div>
+          <div><code>{{ t.name }}</code></div>
+        </div>
+        <div class="mb-2">
+          <div class="text-muted small">Alias</div>
+          <div>{{ t.alias }}</div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="text-muted small">Columnas</div>
+          <div class="fw-semibold">{{ t.columns.count }}</div>
+        </div>
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-secondary flex-fill" href="{% url 'sapy:db_table_edit' t.pk %}"><i class="bi bi-pencil-square"></i> Editar</a>
+          <button type="button" class="btn btn-sm btn-success flex-fill btn-gen-page" data-table-id="{{ t.pk }}">
+            <i class="bi bi-magic"></i> Generar página
+          </button>
+          <form method="post" action="{% url 'sapy:db_table_delete' t.pk %}" class="flex-fill" onsubmit="return confirm('¿Eliminar tabla {{ t.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash"></i> Eliminar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="text-center p-4 text-muted">No hay tablas registradas.</div>
+    {% endfor %}
+  </div>
+
+  <!-- Vista desktop: tabla -->
+  <div class="card d-none d-md-block">
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Esquema</th>
+            <th>Tabla</th>
+            <th>Alias</th>
+            <th>Tipo</th>
+            <th>Columnas</th>
+            <th>Activo</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tables %}
+          <tr>
+            <td><code>{{ t.schema_name|default:'public' }}</code></td>
+            <td><a href="{% url 'sapy:db_table_detail' t.pk %}"><code>{{ t.name }}</code></a></td>
+            <td>{{ t.alias }}</td>
+            <td>{{ t.get_table_kind_display }}</td>
+            <td>{{ t.columns.count }}</td>
+            <td>
+              <form method="post" action="{% url 'sapy:db_table_toggle_active' t.pk %}" class="d-inline">
+                {% csrf_token %}
+                {% if t.activo %}
+                  <button class="btn btn-sm btn-success" title="Activo">Activo</button>
+                {% else %}
+                  <button class="btn btn-sm btn-secondary" title="Inactivo">Inactivo</button>
+                {% endif %}
+              </form>
+            </td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'sapy:db_table_edit' t.pk %}"><i class="bi bi-pencil-square"></i> Editar</a>
+              <button type="button" class="btn btn-sm btn-success btn-gen-page" data-table-id="{{ t.pk }}">
+                <i class="bi bi-magic"></i> Generar página
+              </button>
+              <form method="post" action="{% url 'sapy:db_table_delete' t.pk %}" class="d-inline" onsubmit="return confirm('¿Eliminar tabla {{ t.name }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Eliminar</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center p-4">No hay tablas registradas.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  function getCookie(name){
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+  document.querySelectorAll('.btn-gen-page').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-table-id');
+      try{
+        if (typeof showLoading === 'function') showLoading('Generando página...');
+        const resp = await fetch('{% url "sapy:page_generate_from_dbtable" %}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+          body: JSON.stringify({ dbtable_id: parseInt(id) })
+        });
+        const data = await resp.json();
+        if (typeof hideLoading === 'function') hideLoading();
+        if (!resp.ok || !data.success){
+          if (typeof showError === 'function') showError(data.message || 'No se pudo generar la página');
+          return;
+        }
+        if (typeof showSuccess === 'function') showSuccess('Página generada');
+        window.location.href = '{% url "sapy:page_detail" 0 %}'.replace('/0/', '/' + data.page_id + '/');
+      }catch(e){
+        if (typeof hideLoading === 'function') hideLoading();
+        if (typeof showError === 'function') showError(e && e.message ? e.message : 'Error inesperado');
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}
+

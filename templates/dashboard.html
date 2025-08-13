@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+  <h1>Dashboard</h1>
+  <p>Hola, {{ user.username }}. Sesión iniciada correctamente.</p>
+  <form method="post" action="{% url 'logout' %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn">Cerrar sesión</button>
+  </form>
+{% endblock %}

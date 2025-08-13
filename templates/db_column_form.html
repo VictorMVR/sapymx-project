@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <a class="btn btn-outline-secondary w-100 w-md-auto" href="{% url 'sapy:db_table_detail' table.pk %}"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {{ form.table }}
+    <div class="card">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">{{ form.name.label_tag }} {{ form.name }}</div>
+          <div class="col-md-3">{{ form.data_type.label_tag }} {{ form.data_type }}</div>
+          <div class="col-md-2">{{ form.length.label_tag }} {{ form.length }}</div>
+          <div class="col-md-2">{{ form.numeric_precision.label_tag }} {{ form.numeric_precision }}</div>
+          <div class="col-md-1">{{ form.numeric_scale.label_tag }} {{ form.numeric_scale }}</div>
+          {# position se calcula automáticamente; no se captura #}
+
+          <div class="col-md-2 form-check">{{ form.is_nullable }} {{ form.is_nullable.label_tag }}</div>
+          <div class="col-md-2 form-check">{{ form.is_unique }} {{ form.is_unique.label_tag }}</div>
+          <div class="col-md-2 form-check">{{ form.is_index }} {{ form.is_index.label_tag }}</div>
+          <div class="col-md-2 form-check">{{ form.is_primary_key }} {{ form.is_primary_key.label_tag }}</div>
+          <div class="col-md-2 form-check">{{ form.is_auto_increment }} {{ form.is_auto_increment.label_tag }}</div>
+
+          <div class="col-md-4">{{ form.default_value.label_tag }} {{ form.default_value }}</div>
+          {# FK y on_delete se configuran automáticamente si el nombre inicia con id_ #}
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-end">
+        <button type="submit" class="btn btn-success">{{ submit_text }}</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
