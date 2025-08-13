@@ -2489,8 +2489,23 @@ def _ensure_directory_writable(path: str, web_user: str = 'www-data') -> tuple[b
             os.chmod(path, 0o775)
         except Exception:
             pass
-        if not os.access(path, os.W_OK):
-            return False, f'No hay permisos de escritura en: {path}'
+        # Intentar una escritura real como prueba
+        try:
+            test_file = os.path.join(path, '.__write_test__')
+            with open(test_file, 'w') as tf:
+                tf.write('ok')
+            os.remove(test_file)
+        except Exception:
+            import pwd as _pwd, grp as _grp
+            try:
+                st = os.stat(path)
+                owner = _pwd.getpwuid(st.st_uid).pw_name
+                group = _grp.getgrgid(st.st_gid).gr_name
+                mode = oct(st.st_mode & 0o777)
+                euser = _pwd.getpwuid(os.geteuid()).pw_name
+                return False, f'No hay permisos de escritura en: {path} (owner={owner}, group={group}, mode={mode}, euid={euser})'
+            except Exception:
+                return False, f'No hay permisos de escritura en: {path}'
         return True, None
     except Exception as e:
         return False, f'Error corrigiendo/verificando permisos del directorio: {e}'
