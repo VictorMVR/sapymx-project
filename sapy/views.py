@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.utils import timezone
-from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, ApplicationPage, Menu, MenuPage, ApplicationMenu, Icon, _derive_form_question_defaults
+from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, Menu, MenuPage, ApplicationMenu, Icon, _derive_form_question_defaults
 from .forms import ApplicationForm, QuickDeployForm, DbTableForm, DbColumnForm, DbTableColumnForm
 from django.db import models
 import subprocess
