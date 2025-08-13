@@ -148,3 +148,4 @@ media/
 # OS
 .DS_Store
 Thumbs.db
+.db_credentials
