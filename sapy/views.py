@@ -2844,6 +2844,9 @@ def get_table_dependencies(root_table: DbTable) -> list[DbTable]:
 		col_name = tc.column.name or ''
 		if col_name.startswith('id_') and len(col_name) > 3:
 			ref_name = col_name[3:]
+			# Excepción: auth_user es tabla base de Django, no exigirla en catálogo
+			if ref_name == 'auth_user':
+				continue
 			if ref_name and ref_name not in seen_names:
 				dep = DbTable.objects.filter(name=ref_name).first()
 				if dep:
@@ -2864,6 +2867,10 @@ def analyze_dependency_status(application: Application, root_table: DbTable) -> 
 			continue
 		ref_name = col_name[3:]
 		if not ref_name or ref_name in seen_names:
+			continue
+		# Excepción: auth_user existe por defecto en la app Django
+		if ref_name == 'auth_user':
+			seen_names.add(ref_name)
 			continue
 		seen_names.add(ref_name)
 		dep = DbTable.objects.filter(name=ref_name).first()
