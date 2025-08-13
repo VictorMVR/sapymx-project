@@ -2836,9 +2836,10 @@ def run_migrations_in_app(application, table_name):
             "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', '" + f"{application.name}.settings" + "');\n"
             "import django; django.setup();\n"
             "from django.db import connection;\n"
-            "import sys; tn=os.environ.get('TARGET_TABLE');\n"
+            "tn=os.environ.get('TARGET_TABLE');\n"
+            "sql=\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name=%s)\";\n"
             "with connection.cursor() as c:\n"
-            "    c.execute(\""\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name=%s)\""\", [tn]);\n"
+            "    c.execute(sql, [tn]);\n"
             "    print('EXISTS=' + str(c.fetchone()[0]))\n"
         )
         env2 = env.copy()
