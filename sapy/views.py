@@ -5,6 +5,8 @@ from django.contrib import messages
 from django.urls import reverse
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
+import os
+import shutil
 from django.db import transaction
 from django.utils import timezone
 from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, Menu, MenuPage, ApplicationMenu, Role, RoleMenu, Icon, _derive_form_question_defaults
@@ -2467,6 +2469,33 @@ def get_table_record_count(application, table):
 		return None
 
 
+def _ensure_directory_writable(path: str, web_user: str = 'www-data') -> tuple[bool, str | None]:
+    """Intenta dejar un directorio existente o creado como escribible para el proceso web.
+    - Crea el directorio si no existe
+    - Aplica chown y chmod (mejor esfuerzo, sin depender de binarios externos)
+    - Revalida acceso de escritura
+    Retorna (ok, error_msg).
+    """
+    try:
+        os.makedirs(path, mode=0o775, exist_ok=True)
+    except Exception as e:
+        return False, f'No se pudo crear directorio: {path} → {e}'
+    try:
+        try:
+            shutil.chown(path, user=web_user, group=web_user)
+        except Exception:
+            pass
+        try:
+            os.chmod(path, 0o775)
+        except Exception:
+            pass
+        if not os.access(path, os.W_OK):
+            return False, f'No hay permisos de escritura en: {path}'
+        return True, None
+    except Exception as e:
+        return False, f'Error corrigiendo/verificando permisos del directorio: {e}'
+
+
 def generate_django_model_for_table(application, table):
     """Genera un modelo Django para una tabla específica en la aplicación destino."""
     try:
@@ -2487,70 +2516,24 @@ def generate_django_model_for_table(application, table):
         print(f"DEBUG: Ruta del archivo de modelos: {model_file_path}")
         
         # Crear toda la estructura de directorios necesaria
-        import os
         import pwd
         
-        # Crear directorio base de la aplicación si no existe
+        # Asegurar permisos en base_path, app_base_dir y app_django_dir
         app_base_dir = f"{base_path}/{app_name}"
-        if not os.path.exists(app_base_dir):
-            try:
-                os.makedirs(app_base_dir, mode=0o755, exist_ok=True)
-                print(f"DEBUG: Directorio base de aplicación creado: {app_base_dir}")
-            except PermissionError:
-                return {'success': False, 'error': f'No hay permisos para crear directorio base: {app_base_dir}'}
-            except Exception as e:
-                return {'success': False, 'error': f'Error creando directorio base: {e}'}
-        
-        # Crear directorio de la app Django si no existe
         app_django_dir = f"{app_base_dir}/{app_name}"
-        if not os.path.exists(app_django_dir):
-            try:
-                os.makedirs(app_django_dir, mode=0o775, exist_ok=True)
-                print(f"DEBUG: Directorio Django creado: {app_django_dir}")
-            except PermissionError:
-                return {'success': False, 'error': f'No hay permisos para crear directorio Django: {app_django_dir}'}
-            except Exception as e:
-                return {'success': False, 'error': f'Error creando directorio Django: {e}'}
-        
-        # Verificar permisos de escritura en el directorio Django
-        if not os.access(app_django_dir, os.W_OK):
-            # Intentar corregir permisos del directorio sin depender de binarios del sistema
-            try:
-                import shutil
-                web_user = 'www-data'
-                # chown recursivo si es posible
-                try:
-                    for root, dirs, files in os.walk(app_django_dir):
-                        try:
-                            shutil.chown(root, user=web_user, group=web_user)
-                        except Exception:
-                            pass
-                        for d in dirs:
-                            p = os.path.join(root, d)
-                            try:
-                                shutil.chown(p, user=web_user, group=web_user)
-                            except Exception:
-                                pass
-                        for f in files:
-                            p = os.path.join(root, f)
-                            try:
-                                shutil.chown(p, user=web_user, group=web_user)
-                            except Exception:
-                                pass
-                except Exception:
-                    # si chown falla, continuar a chmod e intentar acceso
-                    pass
-                # chmod del directorio base
-                try:
-                    os.chmod(app_django_dir, 0o775)
-                except Exception:
-                    pass
-                # Revalidar acceso de escritura
-                if not os.access(app_django_dir, os.W_OK):
-                    return {'success': False, 'error': f'No hay permisos de escritura en: {app_django_dir}'}
-                print(f"DEBUG: Permisos del directorio verificados/corregidos (Python) para {app_django_dir}")
-            except Exception as e:
-                return {'success': False, 'error': f'Error corrigiendo/verificando permisos del directorio: {e}'}
+        # 1) base_path
+        ok, err = _ensure_directory_writable(base_path)
+        if not ok:
+            return {'success': False, 'error': err}
+        # 2) app_base_dir
+        ok, err = _ensure_directory_writable(app_base_dir)
+        if not ok:
+            return {'success': False, 'error': err}
+        # 3) app_django_dir
+        ok, err = _ensure_directory_writable(app_django_dir)
+        if not ok:
+            return {'success': False, 'error': err}
+        print(f"DEBUG: Directorios verificados: base={base_path} app_base={app_base_dir} app_django={app_django_dir}")
         
         # Crear archivo __init__.py si no existe
         init_file = f"{app_django_dir}/__init__.py"
@@ -2574,12 +2557,9 @@ def generate_django_model_for_table(application, table):
         # Verificar permisos del archivo models.py
         if os.path.exists(model_file_path):
             if not os.access(model_file_path, os.W_OK):
-                # Intentar cambiar permisos del archivo sin binarios externos
                 try:
-                    import shutil
-                    web_user = 'www-data'
                     try:
-                        shutil.chown(model_file_path, user=web_user, group=web_user)
+                        shutil.chown(model_file_path, user='www-data', group='www-data')
                     except Exception:
                         pass
                     try:
