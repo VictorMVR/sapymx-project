@@ -2778,6 +2778,7 @@ def run_migrations_in_app(application, table_name):
     try:
         import subprocess
         import os
+        import shlex
         
         # Cambiar al directorio de la aplicación
         app_dir = f"{application.base_path}/{application.name}"
@@ -2799,8 +2800,8 @@ def run_migrations_in_app(application, table_name):
         
         # Ejecutar makemigrations
         print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
-        result = subprocess.run(
-            [python_cmd, 'manage.py', 'makemigrations'],
+                    result = subprocess.run(
+                        [python_cmd, 'manage.py', 'makemigrations', application.name],
             cwd=app_dir,
             capture_output=True,
             text=True,
@@ -2816,8 +2817,8 @@ def run_migrations_in_app(application, table_name):
         
         # Ejecutar migrate
         print(f"DEBUG: Ejecutando migrate en {app_dir}")
-        result = subprocess.run(
-            [python_cmd, 'manage.py', 'migrate'],
+                    result = subprocess.run(
+                        [python_cmd, 'manage.py', 'migrate', application.name],
             cwd=app_dir,
             capture_output=True,
             text=True,
@@ -2830,7 +2831,33 @@ def run_migrations_in_app(application, table_name):
             return {'success': False, 'error': f'Error en migrate: {error_msg}'}
         
         print(f"DEBUG: migrate exitoso")
-        return {'success': True, 'message': 'Migraciones ejecutadas exitosamente'}
+        # Validación: confirmar que la tabla existe en la BD de la app destino usando sus settings
+        validate_code = (
+            "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', '" + f"{application.name}.settings" + "');\n"
+            "import django; django.setup();\n"
+            "from django.db import connection;\n"
+            "import sys; tn=os.environ.get('TARGET_TABLE');\n"
+            "with connection.cursor() as c:\n"
+            "    c.execute(\""\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name=%s)\""\", [tn]);\n"
+            "    print('EXISTS=' + str(c.fetchone()[0]))\n"
+        )
+        env2 = env.copy()
+        env2['TARGET_TABLE'] = table_name
+        vres = subprocess.run(
+            [python_cmd, '-c', validate_code],
+            cwd=app_dir,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env2
+        )
+        out = (vres.stdout or '') + ("\n" + vres.stderr if vres.stderr else '')
+        if vres.returncode != 0:
+            return {'success': False, 'error': f'Validación posterior falló: {out.strip()}'}
+        exists_flag = 'EXISTS=True' in out
+        if not exists_flag:
+            return {'success': False, 'error': 'Migraciones ejecutadas pero la tabla no existe en la BD destino (revisa INSTALLED_APPS y app label)'}
+        return {'success': True, 'message': 'Migraciones ejecutadas y tabla confirmada en BD'}
         
     except Exception as e:
         import traceback
