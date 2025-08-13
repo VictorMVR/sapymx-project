@@ -30,41 +30,44 @@
     </div>
   </div>
 
-  <!-- Filtros -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <form method="get" class="row g-3">
-        <div class="col-md-6">
-          <label for="search" class="form-label">Buscar</label>
+  <!-- Filtros estandarizados -->
+  <div class="sapy-filter-section">
+    <form method="get" class="row g-3">
+      <div class="col-md-6">
+        <label for="search" class="form-label">Buscar columna</label>
+        <div class="sapy-search-input">
           <input type="text" class="form-control" id="search" name="search" 
                  value="{{ search_query }}" placeholder="Nombre de columna...">
         </div>
-        <div class="col-md-4">
-          <label for="data_type" class="form-label">Tipo de Dato</label>
-          <select class="form-select" id="data_type" name="data_type">
-            <option value="">Todos los tipos</option>
-            {% for type in data_types %}
-              <option value="{{ type }}" {% if type == data_type_filter %}selected{% endif %}>
-                {{ type|upper }}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <button type="submit" class="btn btn-outline-secondary me-2">
+      </div>
+      <div class="col-md-4">
+        <label for="data_type" class="form-label">Tipo de Dato</label>
+        <select class="form-select" id="data_type" name="data_type">
+          <option value="">Todos los tipos</option>
+          {% for type in data_types %}
+            <option value="{{ type }}" {% if type == data_type_filter %}selected{% endif %}>
+              {{ type|upper }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">&nbsp;</label>
+        <div class="sapy-filter-actions">
+          <button type="submit" class="btn btn-primary sapy-btn-icon">
             <i class="bi bi-search"></i> Filtrar
           </button>
-          <a href="{% url 'sapy:db_column_list' %}" class="btn btn-outline-secondary">
+          <a href="{% url 'sapy:db_column_list' %}" class="btn btn-outline-secondary sapy-btn-icon" title="Limpiar filtros">
             <i class="bi bi-x-circle"></i>
           </a>
         </div>
-      </form>
-    </div>
+      </div>
+    </form>
   </div>
 
   {% if columns %}
     <!-- Vista móvil: tarjetas -->
-    <div class="d-md-none">
+    <div class="sapy-mobile-view">
       {% for column in columns %}
         <div class="card mb-3">
           <div class="card-body">
@@ -154,11 +157,13 @@
               </div>
               <div class="col-12">
                 <strong>Propiedades:</strong>
-                {% if column.first_instance.is_primary_key %}<span class="badge bg-warning text-dark">PK</span>{% endif %}
-                {% if column.first_instance.is_unique %}<span class="badge bg-info">Único</span>{% endif %}
-                {% if column.first_instance.is_index %}<span class="badge bg-success">Índice</span>{% endif %}
-                {% if not column.first_instance.is_nullable %}<span class="badge bg-danger">No Nulo</span>{% endif %}
-                {% if column.first_instance.is_auto_increment %}<span class="badge bg-primary">Auto Inc</span>{% endif %}
+                <div class="sapy-property-list">
+                  {% if column.first_instance.is_primary_key %}<span class="sapy-property-badge primary-key"><i class="bi bi-key"></i>PK</span>{% endif %}
+                  {% if column.first_instance.is_unique %}<span class="sapy-property-badge unique"><i class="bi bi-star"></i>Único</span>{% endif %}
+                  {% if column.first_instance.is_index %}<span class="sapy-property-badge index"><i class="bi bi-list-ol"></i>Índice</span>{% endif %}
+                  {% if not column.first_instance.is_nullable %}<span class="sapy-property-badge not-null"><i class="bi bi-exclamation"></i>No Nulo</span>{% endif %}
+                  {% if column.first_instance.is_auto_increment %}<span class="sapy-property-badge auto-increment"><i class="bi bi-arrow-up"></i>Auto Inc</span>{% endif %}
+                </div>
               </div>
               {% if column.first_instance.references_table %}
                 <div class="col-12">
@@ -177,10 +182,10 @@
     </div>
 
     <!-- Vista desktop: tabla -->
-    <div class="card d-none d-md-block">
+    <div class="card sapy-desktop-view">
       <div class="card-body p-0 table-responsive">
-        <table class="table table-striped align-middle mb-0">
-          <thead class="table-dark">
+        <table class="sapy-table table table-striped align-middle mb-0">
+          <thead>
             <tr>
               <th>Definición</th>
               <th>Tipo</th>
@@ -217,11 +222,13 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% if column.first_instance.is_primary_key %}<span class="badge bg-warning text-dark me-1">PK</span>{% endif %}
-                  {% if column.first_instance.is_unique %}<span class="badge bg-info me-1">Único</span>{% endif %}
-                  {% if column.first_instance.is_index %}<span class="badge bg-success me-1">Índice</span>{% endif %}
-                  {% if not column.first_instance.is_nullable %}<span class="badge bg-danger me-1">No Nulo</span>{% endif %}
-                  {% if column.first_instance.is_auto_increment %}<span class="badge bg-primary me-1">Auto Inc</span>{% endif %}
+                  <div class="sapy-property-list">
+                    {% if column.first_instance.is_primary_key %}<span class="sapy-property-badge primary-key">PK</span>{% endif %}
+                    {% if column.first_instance.is_unique %}<span class="sapy-property-badge unique">Único</span>{% endif %}
+                    {% if column.first_instance.is_index %}<span class="sapy-property-badge index">Índice</span>{% endif %}
+                    {% if not column.first_instance.is_nullable %}<span class="sapy-property-badge not-null">No Nulo</span>{% endif %}
+                    {% if column.first_instance.is_auto_increment %}<span class="sapy-property-badge auto-increment">Auto Inc</span>{% endif %}
+                  </div>
                 </td>
                 <td>
                   {% if column.first_instance.default_value %}

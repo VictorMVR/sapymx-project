@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div class="btn-group">
+      <a href="{% url 'sapy:application_detail' application.pk %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver a Aplicación
+      </a>
+      <a href="{% url 'sapy:menus_list' %}" class="btn btn-outline-info">
+        <i class="bi bi-list"></i> Ver Menús
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header"><strong>Menús asignados</strong></div>
+        <div class="card-body">
+          {% if assigned_menus %}
+          <div class="accordion" id="menusAccordion">
+            {% for item in assigned_menus %}
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="h-{{ item.menu.id }}">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#c-{{ item.menu.id }}">
+                  {% if item.menu.icon %}<i class="{{ item.menu.icon }} me-2"></i>{% endif %} {{ item.menu.title }}
+                </button>
+              </h2>
+              <div id="c-{{ item.menu.id }}" class="accordion-collapse collapse" data-bs-parent="#menusAccordion">
+                <div class="accordion-body">
+                  {% if item.pages %}
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                      <thead>
+                        <tr>
+                          <th>Página</th>
+                          <th>Ruta</th>
+                          <th>Sección</th>
+                          <th>Orden</th>
+                          <th>Existe Ruta</th>
+                          <th>Registros</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for p in item.pages %}
+                        <tr>
+                          <td>{% if p.icon %}<i class="{{ p.icon }} me-1"></i>{% endif %} {{ p.title }}</td>
+                          <td><code>{{ p.route_path }}</code></td>
+                          <td>{{ p.section }}</td>
+                          <td>{{ p.order_index }}</td>
+                          <td>{% if p.route_exists is None %}<span class="text-muted">N/D</span>{% elif p.route_exists %}<span class="text-success">Sí</span>{% else %}<span class="text-danger">No</span>{% endif %}</td>
+                          <td>{% if p.records == 'N/D' %}<span class="text-muted">N/D</span>{% else %}{{ p.records }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                  {% else %}
+                  <div class="text-muted">Este menú no tiene páginas asignadas</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-muted">Sin menús asignados</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header"><strong>Asignar menú</strong></div>
+        <div class="card-body">
+          <form method="get" class="mb-3" onsubmit="return false;">
+            <div class="input-group">
+              <input id="menuSearch" type="text" class="form-control" placeholder="Buscar menú..." value="{{ search_query }}">
+              <button class="btn btn-outline-secondary" type="button" onclick="triggerMenuSearch()"><i class="bi bi-search"></i></button>
+            </div>
+          </form>
+          <div id="menuResults"></div>
+          <div id="menuEmpty" class="text-center py-3 d-none text-muted">Sin resultados</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function debounce(fn, d){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), d); } }
+async function doMenuSearch(){
+  const q = (document.getElementById('menuSearch')?.value || '').trim();
+  const resultsEl = document.getElementById('menuResults');
+  const emptyEl = document.getElementById('menuEmpty');
+  if (!q){ resultsEl.innerHTML=''; emptyEl?.classList.add('d-none'); return; }
+  try{
+    const resp = await fetch('{% url "sapy:application_menus_search" application.pk %}?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    const data = await resp.json();
+    const rows = (data.results || []).map(item => `
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">${item.icon ? `<i class="${item.icon} me-1"></i>` : ''}${escapeHtml(item.title)}</div>
+          <div class="text-muted small"><code>${escapeHtml(item.name)}</code></div>
+        </div>
+        <form method="post" class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="assign" />
+          <input type="hidden" name="menu_id" value="${item.id}" />
+          <button class="btn btn-sm btn-outline-success"><i class="bi bi-plus-circle"></i> Asignar</button>
+        </form>
+      </div>
+    `).join('');
+    if (rows){ resultsEl.innerHTML = `<div class="list-group list-group-flush">${rows}</div>`; emptyEl?.classList.add('d-none'); }
+    else { resultsEl.innerHTML=''; emptyEl?.classList.remove('d-none'); }
+  }catch(e){ console.error(e); }
+}
+const triggerMenuSearch = ()=>doMenuSearch();
+document.getElementById('menuSearch')?.addEventListener('input', debounce(doMenuSearch, 250));
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+</script>
+{% endblock %}
+
+

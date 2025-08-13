@@ -3,10 +3,9 @@
 {% block content %}
 <div class="container-fluid mt-3">
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-    <h2 class="mb-0">{{ title }}</h2>
+    <h2 class="mb-0">{% if page.icon %}<i class="{{ page.icon }} me-2"></i>{% endif %} {{ title }}</h2>
     <div>
       <a class="btn btn-outline-secondary" href="{% url 'sapy:pages_list' %}"><i class="bi bi-arrow-left"></i> Volver</a>
-      <a class="btn btn-primary" target="_blank" href="{% url 'sapy:page_effective_config' page.id %}"><i class="bi bi-braces"></i> Ver JSON</a>
     </div>
   </div>
   <div class="card">
@@ -18,12 +17,19 @@
           <label class="form-label small">Título</label>
           <input type="text" name="title" class="form-control" value="{{ page.title }}">
         </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label small">Icono</label>
+          <div class="input-group">
+            <input id="iconInput" type="text" name="icon" class="form-control" value="{{ page.icon }}" placeholder="bi bi-people o fas fa-user">
+            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#iconPickerModal">Elegir</button>
+          </div>
+          <div class="mt-1 small text-muted">Previsualización: <i id="iconPreview" class="{{ page.icon }}"></i></div>
+        </div>
         <div class="col-12 col-md-3"><div class="text-muted small">Tipo</div>{{ page.get_source_type_display }}</div>
         <div class="col-12 col-md-3"><div class="text-muted small">Ruta</div><code>{{ page.route_path }}</code></div>
         <div class="col-12 col-md-3"><div class="text-muted small">Tabla BD</div>{% if page.db_table %}{{ page.db_table.name }}{% else %}-{% endif %}</div>
         <div class="col-12">
           <button class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
-          <a class="btn btn-outline-primary" target="_blank" href="{% url 'sapy:page_effective_config' page.id %}"><i class="bi bi-braces"></i> Ver JSON</a>
         </div>
       </form>
     </div>
@@ -378,6 +384,13 @@
     tbody.addEventListener('dragend', () => { if (dragging){ dragging.classList.remove('table-active'); dragging=null; sendOrder(); }});
   }
 })();
+</script>
+
+{% include 'partials/icon_picker_modal.html' %}
+<script>
+document.getElementById('iconInput')?.addEventListener('input', function(){
+  document.getElementById('iconPreview').className = this.value.trim();
+});
 </script>
 
 <script>

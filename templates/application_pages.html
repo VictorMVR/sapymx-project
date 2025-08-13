@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2><i class="bi bi-file-earmark-text text-primary"></i> {{ title }}</h2>
+      <p class="text-muted mb-0">Asigna páginas a esta aplicación. Independiente de tablas BD.</p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url 'sapy:application_detail' application.pk %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver a Aplicación
+      </a>
+      <a href="{% url 'sapy:pages_list' %}" class="btn btn-outline-info">
+        <i class="bi bi-file-earmark-text"></i> Ver Todas las Páginas
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Páginas Asignadas -->
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-check-circle text-success"></i> Páginas Asignadas
+            <span class="badge bg-success ms-2">{{ assigned_pages.count }}</span>
+          </h5>
+        </div>
+        <div class="card-body">
+          {% if assigned_pages %}
+          <div class="list-group list-group-flush">
+            {% for ap in assigned_pages %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <h6 class="mb-1">{{ ap.page.title }}</h6>
+                <small class="text-muted">
+                  <code>{{ ap.page.slug }}</code> • Ruta: <code>{{ ap.page.route_path }}</code>
+                  {% if ap.assigned_at %} • Asignada el {{ ap.assigned_at|date:"d/m/Y H:i" }}{% endif %}
+                </small>
+              </div>
+              <form method="post" class="d-inline" onsubmit="return confirmUnassign(event, '{{ ap.page.slug }}');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unassign">
+                <input type="hidden" name="page_id" value="{{ ap.page.pk }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm" title="Desasignar página">
+                  <i class="bi bi-x-circle"></i>
+                </button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-center py-4">
+            <i class="bi bi-file-earmark text-muted" style="font-size: 3rem;"></i>
+            <p class="text-muted mt-2">No hay páginas asignadas a esta aplicación</p>
+            <p class="text-muted small">Asigna páginas desde el buscador</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Buscador y Asignación -->
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-plus-circle text-info"></i> Asignar Nueva Página
+          </h5>
+        </div>
+        <div class="card-body">
+          <!-- Búsqueda -->
+          <form method="get" class="mb-3" onsubmit="return false;">
+            <div class="input-group">
+              <input id="live-search" type="text" class="form-control" name="search" value="{{ search_query }}" placeholder="Buscar página (slug o título)...">
+              <button class="btn btn-outline-secondary" type="button" onclick="triggerLiveSearch()">
+                <i class="bi bi-search"></i>
+              </button>
+              <a href="{% url 'sapy:application_pages' application.pk %}" class="btn btn-outline-secondary d-none" id="clearSearchBtn">
+                <i class="bi bi-x-circle"></i>
+              </a>
+            </div>
+          </form>
+
+          <!-- Resultados en vivo -->
+          <div id="live-results"></div>
+          <div id="live-empty" class="text-center py-3 d-none">
+            <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+            <p class="text-muted mt-2">No se encontraron páginas</p>
+          </div>
+
+          {% if search_query and available_pages %}
+          <div class="list-group list-group-flush">
+            {% for p in available_pages %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <h6 class="mb-1">{{ p.title }}</h6>
+                <small class="text-muted"><code>{{ p.slug }}</code> • {{ p.get_source_type_display }}</small>
+              </div>
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="assign">
+                <input type="hidden" name="page_id" value="{{ p.pk }}">
+                <button type="submit" class="btn btn-outline-success btn-sm" title="Asignar página">
+                  <i class="bi bi-plus-circle"></i> Asignar
+                </button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% elif search_query and not available_pages %}
+          <div class="text-center py-3">
+            <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+            <p class="text-muted mt-2">No se encontraron páginas con "{{ search_query }}"</p>
+            <a href="{% url 'sapy:application_pages' application.pk %}" class="btn btn-outline-secondary btn-sm">Limpiar búsqueda</a>
+          </div>
+          {% else %}
+          <div class="text-center py-3">
+            <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+            <p class="text-muted">Busca páginas para asignar</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const input = document.getElementById('live-search');
+  if (input) {
+    input.addEventListener('input', debounce(performLiveSearch, 250));
+    if (input.value.trim() !== '') performLiveSearch();
+  }
+});
+
+function triggerLiveSearch(){ performLiveSearch(); }
+
+function debounce(fn, delay){ let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this, arguments), delay); }; }
+
+async function performLiveSearch(){
+  const input = document.getElementById('live-search');
+  const q = (input?.value || '').trim();
+  const resultsEl = document.getElementById('live-results');
+  const emptyEl = document.getElementById('live-empty');
+  const clearBtn = document.getElementById('clearSearchBtn');
+  if (!resultsEl) return;
+  if (!q){ resultsEl.innerHTML=''; emptyEl?.classList.add('d-none'); clearBtn?.classList.add('d-none'); return; }
+  clearBtn?.classList.remove('d-none');
+  try{
+    const resp = await fetch('{% url "sapy:application_pages_search" application.pk %}?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    const data = await resp.json();
+    const rows = (data.results || []).map(renderResultRow).join('');
+    if (rows){ resultsEl.innerHTML = `<div class="list-group list-group-flush">${rows}</div>`; emptyEl?.classList.add('d-none'); }
+    else { resultsEl.innerHTML=''; emptyEl?.classList.remove('d-none'); }
+  }catch(e){ console.error('Live search error', e); }
+}
+
+function renderResultRow(item){
+  return `
+  <div class="list-group-item d-flex justify-content-between align-items-center">
+    <div>
+      <h6 class="mb-1">${escapeHtml(item.title)}</h6>
+      <small class="text-muted"><code>${escapeHtml(item.slug)}</code> • ${escapeHtml(item.source_type)} • Ruta: <code>${escapeHtml(item.route_path)}</code></small>
+    </div>
+    <form method="post" class="d-inline">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="assign">
+      <input type="hidden" name="page_id" value="${item.id}">
+      <button type="submit" class="btn btn-outline-success btn-sm" title="Asignar página">
+        <i class="bi bi-plus-circle"></i> Asignar
+      </button>
+    </form>
+  </div>`;
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+
+function confirmUnassign(event, pageSlug){
+  event.preventDefault();
+  Swal.fire({
+    title: 'Desasignar Página',
+    text: `¿Desasignar la página "${pageSlug}" de esta aplicación?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    cancelButtonColor: '#6c757d',
+    confirmButtonText: '<i class="bi bi-x-circle"></i> Desasignar',
+    cancelButtonText: 'Cancelar'
+  }).then((result)=>{ if(result.isConfirmed){ event.target.closest('form').submit(); } });
+  return false;
+}
+</script>
+{% endblock %}
+
+

@@ -15,6 +15,11 @@ urlpatterns = [
     path('applications/<int:pk>/tables/', views.application_tables, name='application_tables'),
     path('applications/<int:app_pk>/tables/<int:table_pk>/', views.application_table_detail, name='application_table_detail'),
     path('applications/<int:pk>/tables/search/', views.application_tables_search, name='application_tables_search'),
+    # Menús por aplicación
+    path('applications/<int:pk>/menus/', views.application_menus, name='application_menus'),
+    path('applications/<int:pk>/menus/search/', views.application_menus_search, name='application_menus_search'),
+    path('applications/<int:pk>/pages/', views.application_pages, name='application_pages'),
+    path('applications/<int:pk>/pages/search/', views.application_pages_search, name='application_pages_search'),
 
     # Logs de deployment
     path('applications/<int:pk>/logs/<int:log_pk>/', views.deployment_log_detail, name='deployment_log_detail'),
@@ -59,4 +64,20 @@ urlpatterns = [
     path('pages/modal/<int:modal_id>/field-override/save/', views.modal_form_field_override_save, name='modal_form_field_override_save'),
     path('pages/generate-from-dbtable/', views.page_generate_from_dbtable, name='page_generate_from_dbtable'),
     path('pages/<int:page_id>/effective-config/', views.page_effective_config, name='page_effective_config'),
+
+    # Menús
+    path('pages/menus/', views.menus_list, name='menus_list'),
+    path('pages/menus/new/', views.menu_create, name='menu_create'),
+    path('pages/menus/<int:menu_id>/', views.menu_detail, name='menu_detail'),
+    path('pages/menus/<int:menu_id>/update/', views.menu_update, name='menu_update'),
+    path('pages/menus/<int:menu_id>/assign/', views.menu_assign_page, name='menu_assign_page'),
+    path('pages/menus/<int:menu_id>/unassign/', views.menu_unassign_page, name='menu_unassign_page'),
+    path('pages/menus/<int:menu_id>/pages/search/', views.menu_pages_search, name='menu_pages_search'),
+    path('pages/menus/<int:menu_id>/pages/reorder/', views.menu_pages_reorder, name='menu_pages_reorder'),
+    path('pages/menus/<int:menu_id>/page/update/', views.menu_page_update, name='menu_page_update'),
+
+    # Catálogo de íconos (para picker)
+    path('icons/search/', views.icons_search, name='icons_search'),
+    path('icons/', views.icons_list, name='icons_list'),
+    path('icons/import/', views.icons_import, name='icons_import'),
 ]

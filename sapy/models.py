@@ -924,10 +924,21 @@ def _derive_ui_defaults(db_col: DbColumn) -> tuple[dict, dict]:
         fmt = 'datetime:YYYY-MM-DD HH:mm'
 
     # Llave foránea por convención id_<tabla>
-    if name.startswith('id_') and db_col.references_table_id:
-        input_type = UiField.InputType.SELECT
-        options_source = UiField.OptionsSource.FK
-        fk_table = db_col.references_table
+    if name.startswith('id_'):
+        # Para DbColumn no existe references_table; resolvemos por nombre
+        try:
+            from .models import DbTable  # import local para evitar ciclos
+            ref_name = name[3:]
+            fk_table = DbTable.objects.filter(name=ref_name).first()
+            if fk_table:
+                input_type = UiField.InputType.SELECT
+                options_source = UiField.OptionsSource.FK
+        except Exception:
+            pass
+
+    # Etiqueta para columna UI: mantener literal id_* si aplica
+    if name.startswith('id_'):
+        label = name
 
     ui_col = dict(
         label=label,
@@ -1030,7 +1041,10 @@ def _derive_form_question_defaults(db_col: DbColumn, page_title: str = None) -> 
             if fk_table:
                 input_type = FormQuestion.InputType.SELECT
                 options_source = FormQuestion.OptionsSource.FK
-                placeholder = f'Seleccione {label.lower()}'
+                # Ajustar label y placeholder para selects
+                select_label = _title_from_name(table_name)
+                label = f'Seleccionar {select_label}'
+                placeholder = f'Seleccione {select_label.lower()}'
                 width_fraction = '1-2'
         except Exception:
             pass
@@ -1045,6 +1059,10 @@ def _derive_form_question_defaults(db_col: DbColumn, page_title: str = None) -> 
         validation_rule = FormQuestion.ValidationRule.MIN_LENGTH
         validation_value = '8'
         width_fraction = '1-2'
+    elif name in ['archivo', 'imagen']:
+        input_type = FormQuestion.InputType.FILE
+        width_fraction = '1-2'
+        placeholder = f'Seleccione {label.lower()}'
 
     form_question_defaults = {
         'name': name,
@@ -1127,7 +1145,138 @@ class ApplicationTable(models.Model):
         return f"{self.application.name} - {self.table.name}"
 
 
+class ApplicationPage(models.Model):
+    """Relación entre aplicación y página generada/gestionada por SAPY.
+    Permite decidir qué páginas vivirán en una aplicación, independientemente de las tablas BD.
+    """
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='assigned_pages'
+    )
+    page = models.ForeignKey(
+        'Page',
+        on_delete=models.CASCADE,
+        related_name='assigned_applications'
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, help_text='Notas sobre el uso de esta página en la aplicación')
+
+    class Meta:
+        db_table = 'app_generator_application_pages'
+        unique_together = [('application', 'page')]
+        verbose_name = 'Página de Aplicación'
+        verbose_name_plural = 'Páginas de Aplicaciones'
+        ordering = ['application__name', 'page__slug']
+
+    def __str__(self):
+        return f"{self.application.name} - {self.page.slug}"
+
+
 # ==== Gestión de Páginas y Componentes (Pages/Modals/Forms/Table Overrides) ====
+
+
+class Menu(models.Model):
+    """Menú navegable que agrupa páginas en secciones y orden."""
+
+    name = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text='Identificador único en minúsculas (ej: usuarios)'
+    )
+    title = models.CharField(max_length=150, help_text='Título visible en el menú')
+    icon = models.CharField(max_length=100, blank=True, help_text='Clase de icono (ej: bi bi-people, fas fa-user)')
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'app_generator_menus'
+        ordering = ['name']
+        verbose_name = 'Menú'
+        verbose_name_plural = 'Menús'
+
+    def __str__(self) -> str:  # pragma: no cover
+        return self.title or self.name
+
+
+class MenuPage(models.Model):
+    """Asignación de páginas a un menú, con sección y orden."""
+
+    menu = models.ForeignKey(Menu, on_delete=models.CASCADE, related_name='menu_pages')
+    page = models.ForeignKey('Page', on_delete=models.CASCADE, related_name='menu_assignments')
+    section = models.CharField(max_length=100, blank=True, help_text='Etiqueta de sección para agrupar opciones')
+    order_index = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'app_generator_menu_pages'
+        unique_together = [('menu', 'page')]
+        ordering = ['menu__name', 'section', 'order_index']
+        verbose_name = 'Página de Menú'
+        verbose_name_plural = 'Páginas de Menú'
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.menu.name} → {self.page.slug}"
+
+
+class ApplicationMenu(models.Model):
+    """Relación entre aplicación y menú. Un menú agrupa varias páginas reutilizables."""
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='assigned_menus'
+    )
+    menu = models.ForeignKey(
+        Menu,
+        on_delete=models.CASCADE,
+        related_name='assigned_applications'
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'app_generator_application_menus'
+        unique_together = [('application', 'menu')]
+        ordering = ['application__name', 'menu__name']
+        verbose_name = 'Menú de Aplicación'
+        verbose_name_plural = 'Menús de Aplicaciones'
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.application.name} - {self.menu.name}"
+
+
+class Icon(models.Model):
+    class Provider(models.TextChoices):
+        BOOTSTRAP = 'bi', 'Bootstrap Icons'
+        FONTAWESOME = 'fa', 'Font Awesome Free'
+
+    provider = models.CharField(max_length=10, choices=Provider.choices, default=Provider.BOOTSTRAP)
+    class_name = models.CharField(max_length=120, unique=True, help_text='Clase CSS completa, ej: "bi bi-people" o "fas fa-user"')
+    label = models.CharField(max_length=150, blank=True, help_text='Etiqueta legible (opcional)')
+    tags = models.TextField(blank=True, help_text='Palabras clave separadas por espacio/coma (opcional)')
+
+    # Campos extendidos para sincronización desde catálogos
+    library = models.CharField(max_length=32, blank=True, help_text='bootstrap-icons | fontawesome6')
+    version = models.CharField(max_length=24, blank=True)
+    name = models.CharField(max_length=128, blank=True)
+    style = models.CharField(max_length=16, blank=True)
+    unicode = models.CharField(max_length=8, blank=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'app_generator_icons'
+        ordering = ['provider', 'class_name']
+        verbose_name = 'Ícono'
+        verbose_name_plural = 'Íconos'
+
+    def __str__(self) -> str:  # pragma: no cover
+        return self.class_name
 
 
 class Page(models.Model):

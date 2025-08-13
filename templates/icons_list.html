@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div>
+      <a class="btn btn-outline-secondary" href="{% url 'sapy:pages_list' %}"><i class="bi bi-file-earmark-text"></i> Páginas</a>
+      <a class="btn btn-primary" href="{% url 'sapy:icons_import' %}"><i class="bi bi-upload"></i> Importar</a>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+      <input name="q" class="form-control" value="{{ q }}" placeholder="Buscar (clase, etiqueta, tags)">
+    </div>
+    <div class="col-md-2">
+      <select name="provider" class="form-select">
+        <option value="">(Todos)</option>
+        <option value="bi" {% if provider == 'bi' %}selected{% endif %}>Bootstrap Icons</option>
+        <option value="fa" {% if provider == 'fa' %}selected{% endif %}>Font Awesome</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-primary w-100"><i class="bi bi-search"></i> Buscar</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-body">
+      {% if icons %}
+      <div class="row row-cols-2 row-cols-md-4 g-2">
+        {% for ic in icons %}
+        <div class="col">
+          <div class="border rounded p-2 d-flex align-items-center gap-2">
+            <i class="{{ ic.class_name }} fs-5"></i>
+            <div>
+              <div class="small">{{ ic.label|default:ic.class_name }}</div>
+              <div class="text-muted small"><code>{{ ic.class_name }}</code> • {{ ic.get_provider_display }}</div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-muted">Sin íconos</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+

@@ -1,0 +1,139 @@
+{% load static %}
+<div class="modal fade" id="iconPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Seleccionar icono</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <input id="iconSearch" type="text" class="form-control" placeholder="Buscar icono por nombre...">
+        </div>
+        <div id="iconGrid" style="max-height: 420px; overflow:auto; display:grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px;"></div>
+        <small class="text-muted d-block mt-2">Soporta clases de Bootstrap Icons (bi ...) y Font Awesome Free (fas ...). Solo se muestran algunos más usados; puedes escribir cualquier clase válida.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Catálogo básico (fallback) y carga extendida desde JSON estático
+let ICONS = [
+  // Bootstrap Icons (fallback)
+  'bi bi-people','bi bi-person','bi bi-person-badge','bi bi-person-gear','bi bi-gear','bi bi-house','bi bi-list','bi bi-table','bi bi-file-earmark-text','bi bi-box','bi bi-basket','bi bi-tags','bi bi-building','bi bi-geo','bi bi-truck',
+  // Font Awesome Free (fallback)
+  'fas fa-user','fas fa-users','fas fa-cog','fas fa-home','fas fa-list','fas fa-database','fas fa-file','fas fa-box','fas fa-shopping-basket','fas fa-tags','fas fa-city','fas fa-map-marker-alt','fas fa-truck'
+];
+
+async function loadIconCatalogs(){
+  // Intentar primero desde BD vía endpoint; si falla, usar JSON estático; si también falla, fallback mínimo
+  try{
+    const res = await fetch('{% url "sapy:icons_search" %}?q=', {cache:'no-store'});
+    if (res.ok){
+      const data = await res.json();
+      const arr = (data.results || []).map(x => ({
+        class_name: x.class_name,
+        provider: (x.provider || (x.class_name.startsWith('bi')?'bi':'fa')),
+        name: x.name || '',
+        label: x.label || '',
+        tags: x.tags || ''
+      }));
+      if (arr.length > 0){ ICONS = arr; return; }
+    }
+  }catch(e){ /* continua al plan B */ }
+  try{
+    const biUrl = "{% static 'icons/bootstrap-icons.json' %}";
+    const faUrl = "{% static 'icons/fontawesome-free.json' %}";
+    const [biRes, faRes] = await Promise.all([
+      fetch(biUrl, {cache:'no-store'}),
+      fetch(faUrl, {cache:'no-store'})
+    ]);
+    const [bi, fa] = await Promise.all([
+      biRes.ok ? biRes.json() : [],
+      faRes.ok ? faRes.json() : []
+    ]);
+    const merged = [];
+    if (Array.isArray(bi)) merged.push(...bi.map(c => ({ class_name: c, provider: 'bi' })));
+    if (Array.isArray(fa)) merged.push(...fa.map(c => ({ class_name: c, provider: (c.startsWith('fa')?'fa':'bi') })));
+    if (merged.length > 0){ ICONS = merged; }
+  }catch(e){ /* fallback queda activo */ }
+}
+
+function renderIconGrid(filter=''){
+  const grid = document.getElementById('iconGrid'); if(!grid) return;
+  const q = filter.trim().toLowerCase();
+  const items = ICONS.filter(it => {
+    const cls = (typeof it === 'string') ? it : (it.class_name || '');
+    const name = (typeof it === 'object' && it.name) ? it.name : '';
+    const label = (typeof it === 'object' && it.label) ? it.label : '';
+    const tags = (typeof it === 'object' && it.tags) ? it.tags : '';
+    const haystack = `${cls}\n${name}\n${label}\n${tags}`.toLowerCase();
+    return !q || haystack.includes(q);
+  });
+  grid.innerHTML = items.map(it => {
+    const cls = (typeof it === 'string') ? it : (it.class_name || '');
+    const provider = (typeof it === 'object' && it.provider) ? it.provider : (cls.startsWith('bi') ? 'bi' : 'fa');
+    const provLabel = provider === 'bi' ? 'BI' : (provider === 'fa' ? 'FAS' : provider.toUpperCase());
+    const title = `${cls} [${provLabel}]`;
+    return `
+      <button type="button" class="btn btn-outline-secondary icon-choice" data-icon="${cls}" title="${title}" style="height:88px; display:flex; align-items:center; justify-content:center; position:relative;">
+        <i class="${cls}" style="font-size:28px;"></i>
+        <span class="visually-hidden">${cls}</span>
+        ${ (typeof it === 'object' && (it.name || it.label || it.tags)) ? `<span class="visually-hidden">${(it.name||'')} ${(it.label||'')} ${(it.tags||'')}</span>` : ''}
+        <small class="text-muted" style="position:absolute; bottom:4px; right:6px; opacity:.7; font-size:10px;">${provLabel}</small>
+      </button>
+    `;
+  }).join('');
+  grid.querySelectorAll('.icon-choice').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.getAttribute('data-icon') || '';
+      const input = document.getElementById('iconInput');
+      const prev = document.getElementById('iconPreview');
+      if (input) input.value = v;
+      if (prev) prev.className = v;
+      const modalEl = document.getElementById('iconPickerModal');
+      if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
+    });
+  });
+}
+
+async function fetchIconsFromServer(q){
+  try{
+    const url = new URL('{% url "sapy:icons_search" %}', window.location.origin);
+    if (q) url.searchParams.set('q', q);
+    url.searchParams.set('limit', '1200');
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+    if (res.ok){
+      const data = await res.json();
+      ICONS = (data.results || []).map(x => ({
+        class_name: x.class_name,
+        provider: (x.provider || (x.class_name?.startsWith('bi')?'bi':'fa')),
+        name: x.name || '',
+        label: x.label || '',
+        tags: x.tags || ''
+      }));
+      renderIconGrid(q || '');
+      return true;
+    }
+  }catch(e){ /* ignore */ }
+  return false;
+}
+
+function debounce(fn, delay){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), delay); }; }
+
+const onSearchInput = debounce(async (val)=>{
+  const q = (val||'').trim();
+  // Consultar al servidor para cubrir todo el catálogo; si falla, filtrar localmente
+  const ok = await fetchIconsFromServer(q);
+  if (!ok) renderIconGrid(q);
+}, 200);
+
+document.getElementById('iconSearch')?.addEventListener('input', function(){ onSearchInput(this.value || ''); });
+document.getElementById('iconPickerModal')?.addEventListener('shown.bs.modal', async function(){ await fetchIconsFromServer(''); if (ICONS.length === 0) { await loadIconCatalogs(); } renderIconGrid(''); document.getElementById('iconSearch')?.focus(); });
+</script>
+
+

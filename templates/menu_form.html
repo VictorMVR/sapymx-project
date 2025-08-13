@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="card">
+    <div class="card-header"><strong>{{ title }}</strong></div>
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Nombre (minúsculas, único)</label>
+            <input name="name" class="form-control" placeholder="usuarios" pattern="^[a-z0-9_\-]+$" required />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Título</label>
+            <input name="title" class="form-control" placeholder="Usuarios" required />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Icono (clase)</label>
+            <div class="input-group">
+              <input id="iconInput" name="icon" class="form-control" placeholder="bi bi-people o fas fa-user" />
+              <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#iconPickerModal">Elegir</button>
+            </div>
+            <div class="mt-2"><i id="iconPreview" class="text-secondary"></i></div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+          <a href="{% url 'sapy:menus_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% include 'partials/icon_picker_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('iconInput')?.addEventListener('input', function(){
+  document.getElementById('iconPreview').className = this.value.trim();
+});
+</script>
+{% endblock %}
+
+

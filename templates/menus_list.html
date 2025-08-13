@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div>
+      <a class="btn btn-outline-secondary" href="{% url 'sapy:pages_list' %}"><i class="bi bi-file-earmark-text"></i> Páginas</a>
+      <a class="btn btn-primary" href="{% url 'sapy:menu_create' %}"><i class="bi bi-plus-circle"></i> Nuevo Menú</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      {% if menus %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Título</th>
+              <th>Icono</th>
+              <th>Activo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in menus %}
+            <tr>
+              <td><code>{{ m.name }}</code></td>
+              <td>{{ m.title }}</td>
+              <td>{% if m.icon %}<i class="{{ m.icon }}"></i> <span class="text-muted small">{{ m.icon }}</span>{% else %}-{% endif %}</td>
+              <td>{% if m.activo %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+              <td class="text-end">
+                <a href="{% url 'sapy:menu_detail' m.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear"></i> Gestionar</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-muted">Sin menús aún</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+

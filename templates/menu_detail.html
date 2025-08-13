@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <div>
+      <a class="btn btn-outline-secondary" href="{% url 'sapy:menus_list' %}"><i class="bi bi-arrow-left"></i> Volver</a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header"><strong>Propiedades del Menú</strong></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'sapy:menu_update' menu.id %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label">Nombre</label>
+              <input class="form-control" value="{{ menu.name }}" disabled />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Título</label>
+              <input name="title" class="form-control" value="{{ menu.title }}" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Icono</label>
+              <div class="input-group">
+                <input id="iconInput" name="icon" class="form-control" value="{{ menu.icon }}" placeholder="bi bi-people o fas fa-user" />
+                <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#iconPickerModal">Elegir</button>
+              </div>
+              <div class="mt-2"><i id="iconPreview" class="{{ menu.icon }}"></i></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Activo</label>
+              <select name="activo" class="form-select">
+                <option value="true" {% if menu.activo %}selected{% endif %}>Sí</option>
+                <option value="false" {% if not menu.activo %}selected{% endif %}>No</option>
+              </select>
+            </div>
+            <button class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header"><strong>Asignar páginas</strong></div>
+        <div class="card-body">
+          <form method="get" class="mb-3" onsubmit="return false;">
+            <div class="row g-2">
+              <div class="col-8">
+                <input id="live-search" type="text" class="form-control" name="search" value="{{ search_query }}" placeholder="Buscar por slug o título..." />
+              </div>
+              <div class="col-4">
+                <button class="btn btn-outline-secondary w-100" type="button" onclick="triggerLiveSearch()"><i class="bi bi-search"></i> Buscar</button>
+              </div>
+            </div>
+          </form>
+          <div id="live-results"></div>
+          <div id="live-empty" class="text-center py-3 d-none text-muted">Sin resultados</div>
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header"><strong>Páginas asignadas</strong></div>
+        <div class="card-body">
+          {% if assigned %}
+          <div class="list-group list-group-flush">
+            {% regroup assigned by section as section_list %}
+            {% for group in section_list %}
+            <div class="mb-3">
+              {% if group.grouper %}
+              <div class="text-muted small mb-2">Sección: <strong>{{ group.grouper }}</strong></div>
+              {% else %}
+              <div class="text-muted small mb-2">Sin sección</div>
+              {% endif %}
+              <div class="list-group" id="assigned-{{ forloop.counter }}">
+                {% for mp in group.list %}
+                <div class="list-group-item d-flex justify-content-between align-items-center" data-page-id="{{ mp.page.id }}">
+                  <div class="me-3 drag-handle" title="Arrastrar para reordenar" style="cursor:grab">☰</div>
+                  <div class="flex-grow-1">
+                    <div class="fw-semibold">{% if mp.page.icon %}<i class="{{ mp.page.icon }} me-1"></i>{% endif %} {{ mp.page.title }}</div>
+                    <div class="text-muted small"><code>{{ mp.page.slug }}</code> • {{ mp.page.route_path }}</div>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <input class="mp-order" type="hidden" value="{{ mp.order_index }}" />
+                    <select class="form-select form-select-sm w-auto mp-section" title="Sección">
+                      <option value="1" {% if mp.section|default:'1' == '1' %}selected{% endif %}>1</option>
+                      <option value="2" {% if mp.section|default:'1' == '2' %}selected{% endif %}>2</option>
+                      <option value="3" {% if mp.section|default:'1' == '3' %}selected{% endif %}>3</option>
+                      <option value="4" {% if mp.section|default:'1' == '4' %}selected{% endif %}>4</option>
+                      <option value="5" {% if mp.section|default:'1' == '5' %}selected{% endif %}>5</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-primary mp-save" title="Guardar cambios"><i class="bi bi-save"></i></button>
+                    <form method="post" action="{% url 'sapy:menu_unassign_page' menu.id %}" class="d-inline" onsubmit="return confirmUnassign(event, '{{ mp.page.slug }}');">
+                      {% csrf_token %}
+                      <input type="hidden" name="page_id" value="{{ mp.page.id }}" />
+                      <button class="btn btn-sm btn-outline-danger" title="Desasignar"><i class="bi bi-x-circle"></i></button>
+                    </form>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-muted">No hay páginas asignadas</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include 'partials/icon_picker_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('iconInput')?.addEventListener('input', function(){
+  document.getElementById('iconPreview').className = this.value.trim();
+});
+
+document.addEventListener('DOMContentLoaded', function(){
+  const input = document.getElementById('live-search');
+  if (input){ input.addEventListener('input', debounce(performLiveSearch, 250)); }
+});
+
+function debounce(fn, delay){ let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this, arguments), delay); }; }
+function triggerLiveSearch(){ performLiveSearch(); }
+async function performLiveSearch(){
+  const input = document.getElementById('live-search');
+  const q = (input?.value || '').trim();
+  const resultsEl = document.getElementById('live-results');
+  const emptyEl = document.getElementById('live-empty');
+  if (!q){ resultsEl.innerHTML=''; emptyEl?.classList.add('d-none'); return; }
+  try{
+    const resp = await fetch('{% url "sapy:menu_pages_search" menu.id %}?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    const data = await resp.json();
+    const rows = (data.results || []).map(renderRow).join('');
+    if (rows){ resultsEl.innerHTML = `<div class="list-group list-group-flush">${rows}</div>`; emptyEl?.classList.add('d-none'); }
+    else { resultsEl.innerHTML=''; emptyEl?.classList.remove('d-none'); }
+  }catch(e){ console.error(e); }
+}
+function renderRow(item){
+  return `
+  <div class="list-group-item d-flex justify-content-between align-items-center">
+    <div>
+      <div class="fw-semibold">${item.icon ? `<i class="${escapeHtml(item.icon)} me-1"></i>` : ''}${escapeHtml(item.title)}</div>
+      <div class="text-muted small"><code>${escapeHtml(item.slug)}</code> • ${escapeHtml(item.route_path)}</div>
+    </div>
+    <form method="post" action="{% url 'sapy:menu_assign_page' menu.id %}" class="d-inline">
+      {% csrf_token %}
+      <input type="hidden" name="page_id" value="${item.id}" />
+      <input type="hidden" name="section" value="" />
+      <button class="btn btn-sm btn-outline-success"><i class="bi bi-plus-circle"></i> Asignar</button>
+    </form>
+  </div>`;
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+function confirmUnassign(e, slug){
+  e.preventDefault();
+  Swal.fire({title:'Desasignar',text:`¿Quitar "${slug}" del menú?`,icon:'warning',showCancelButton:true}).then(r=>{ if(r.isConfirmed){ e.target.closest('form').submit(); } });
+  return false;
+}
+
+// Guardar sección/orden por fila
+document.addEventListener('click', async function(e){
+  const btn = e.target.closest('.mp-save');
+  if (!btn) return;
+  const row = btn.closest('.list-group-item');
+  const pageId = row?.getAttribute('data-page-id');
+  const section = row?.querySelector('.mp-section')?.value || '1';
+  const orderVal = row?.querySelector('.mp-order')?.value || '1';
+  if (!pageId) return;
+  try{
+    const form = new FormData();
+    form.append('page_id', pageId);
+    form.append('section', section);
+    form.append('order_index', orderVal);
+    const res = await fetch('{% url "sapy:menu_page_update" menu.id %}', { method:'POST', headers:{ 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '' }, body: form });
+    const data = await res.json();
+    if (!data.success) alert(data.message || 'Error');
+    else window.location.reload();
+  }catch(err){ alert('Error'); }
+});
+
+// Reordenamiento por drag-and-drop (por grupo/section visual)
+document.querySelectorAll('[id^="assigned-"]').forEach(group => {
+  let dragging = null;
+  group.querySelectorAll('.list-group-item').forEach(li => {
+    li.setAttribute('draggable','true');
+    li.querySelector('.drag-handle')?.addEventListener('mousedown', () => { li.setAttribute('draggable','true'); });
+  });
+  group.addEventListener('dragstart', (e) => {
+    const li = e.target.closest('.list-group-item');
+    if (!li) return;
+    dragging = li;
+    li.classList.add('opacity-50');
+    e.dataTransfer?.setData('text/plain', li.getAttribute('data-page-id')||'');
+  });
+  group.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const li = e.target.closest('.list-group-item');
+    if (!dragging || !li || li === dragging) return;
+    const rect = li.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height/2;
+    group.insertBefore(dragging, after ? li.nextSibling : li);
+  });
+  group.addEventListener('dragend', async () => {
+    if (!dragging) return;
+    dragging.classList.remove('opacity-50');
+    const items = Array.from(group.querySelectorAll('.list-group-item')).map((li, idx) => ({ page_id: li.getAttribute('data-page-id'), order_index: idx+1, section: li.querySelector('.mp-section')?.value || '1' }));
+    dragging = null;
+    try{
+      await fetch('{% url "sapy:menu_pages_reorder" menu.id %}', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '' }, body: JSON.stringify({ items }) });
+    }catch(err){ /* ignore */ }
+  });
+});
+</script>
+{% endblock %}
+
+

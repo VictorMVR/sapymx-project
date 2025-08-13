@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.utils import timezone
-from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, _derive_form_question_defaults
+from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, ApplicationPage, Menu, MenuPage, ApplicationMenu, Icon, _derive_form_question_defaults
 from .forms import ApplicationForm, QuickDeployForm, DbTableForm, DbColumnForm, DbTableColumnForm
 from django.db import models
 import subprocess
@@ -19,7 +19,7 @@ import re
 
 # ==== FUNCIONES DE CONVERSIÓN DE TIPOS ====
 
-def get_ui_input_type_for_db_type(db_data_type, is_primary_key=False, is_auto_increment=False):
+def get_ui_input_type_for_db_type(db_data_type, is_primary_key=False, is_auto_increment=False, column_name: str | None = None):
     """Convierte tipo de dato de BD a tipo de input de UI."""
     if is_primary_key and is_auto_increment:
         return 'hidden'  # PK auto-increment no se muestra en formularios
@@ -38,6 +38,12 @@ def get_ui_input_type_for_db_type(db_data_type, is_primary_key=False, is_auto_in
         'numeric': 'number',
     }
     
+    # Detectar FKs por convención id_*
+    try:
+        if column_name and column_name.startswith('id_') and not (is_primary_key and is_auto_increment):
+            return 'select'
+    except Exception:
+        pass
     return type_mapping.get(db_data_type, 'text')
 
 def get_ui_label_for_column(column_name, data_type):
@@ -52,6 +58,9 @@ def get_ui_label_for_column(column_name, data_type):
     elif data_type == 'boolean':
         if not any(word in label.lower() for word in ['activo', 'habilitado', 'visible', 'estado']):
             label = f"¿{label}?"
+    # Si es id_* (FK) mantener literal id_* para UiColumn
+    if column_name.startswith('id_'):
+        label = column_name
     
     return label
 
@@ -96,11 +105,26 @@ def create_ui_components_for_column(column):
         
         # Crear UiField
         input_type = get_ui_input_type_for_db_type(
-            column.data_type, 
-            column.is_primary_key, 
-            column.is_auto_increment
+            column.data_type,
+            column.is_primary_key,
+            column.is_auto_increment,
+            column.name
         )
         
+        # Detectar FK y preparar opciones
+        options_source = 'none'
+        fk_table = None
+        fk_label_field = 'nombre'
+        try:
+            if column.name.startswith('id_') and not (column.is_primary_key and column.is_auto_increment):
+                from .models import DbTable
+                ref_name = column.name[3:]
+                fk_table = DbTable.objects.filter(name=ref_name).first()
+                if fk_table:
+                    options_source = 'fk'
+        except Exception:
+            pass
+
         ui_field = UiField.objects.create(
             db_column=column,
             label=get_ui_label_for_column(column.name, column.data_type),
@@ -111,9 +135,9 @@ def create_ui_components_for_column(column):
             max_value='',
             pattern='',
             placeholder=f"Ingrese {get_ui_label_for_column(column.name, column.data_type).lower()}",
-            options_source='none',
-            fk_table=None,
-            fk_label_field='nombre',
+            options_source=options_source,
+            fk_table=fk_table,
+            fk_label_field=fk_label_field,
             order=1
         )
         print(f"DEBUG: UiField creado para {column.name}")
@@ -132,18 +156,36 @@ def create_ui_components_for_column(column):
             elif column.data_type == 'email':
                 validation_rule = 'email'
             
+            # Preparar label y tipo para FKs
+            fq_input_type = input_type
+            fq_question_text = get_ui_label_for_column(column.name, column.data_type)
+            fq_options_source = 'none'
+            fq_fk_table = None
+            if column.name.startswith('id_'):
+                try:
+                    from .models import DbTable
+                    ref_name = column.name[3:]
+                    fq_fk_table = DbTable.objects.filter(name=ref_name).first()
+                    if fq_fk_table:
+                        select_label = ref_name.replace('_', ' ').title()
+                        fq_question_text = f"Seleccionar {select_label}"
+                        fq_input_type = 'select'
+                        fq_options_source = 'fk'
+                except Exception:
+                    pass
+
             form_question = FormQuestion.objects.create(
                 db_column=column,
                 name=column.name,
-                question_text=get_ui_label_for_column(column.name, column.data_type),
+                question_text=fq_question_text,
                 help_text=column.notes or '',
-                input_type=input_type,
+                input_type=fq_input_type,
                 required=not column.is_nullable,
                 validation_rule=validation_rule,
                 validation_value=validation_value,
-                options_source='none',
+                options_source=fq_options_source,
                 options_custom='',
-                fk_table=None,
+                fk_table=fq_fk_table,
                 fk_value_field='id',
                 fk_label_field='nombre',
                 order=1,
@@ -1329,6 +1371,187 @@ def application_tables_search(request, pk):
 	return JsonResponse({'results': data})
 
 
+@login_required
+def application_pages(request, pk):
+    """Gestionar páginas asignadas a una aplicación específica."""
+    application = get_object_or_404(Application, pk=pk)
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        page_id = request.POST.get('page_id')
+        if action == 'assign' and page_id:
+            try:
+                page = get_object_or_404(Page, pk=page_id)
+                # Verificar que no esté ya asignada
+                if application.assigned_pages.filter(page=page).exists():
+                    messages.warning(request, f'La página "{page.slug}" ya está asignada a esta aplicación.')
+                else:
+                    ApplicationPage.objects.create(
+                        application=application,
+                        page=page,
+                        notes=f"Página asignada automáticamente el {timezone.now().strftime('%d/%m/%Y')}"
+                    )
+                    messages.success(request, f'Página "{page.slug}" asignada a la aplicación "{application.display_name}".')
+            except Exception as e:
+                messages.error(request, f'Error al asignar la página: {e}')
+        elif action == 'unassign' and page_id:
+            try:
+                ap = application.assigned_pages.filter(page_id=page_id).first()
+                if ap:
+                    page_slug = ap.page.slug
+                    ap.delete()
+                    messages.success(request, f'Página "{page_slug}" desasignada de la aplicación.')
+                else:
+                    messages.error(request, 'No se encontró la asignación de página.')
+            except Exception as e:
+                messages.error(request, f'Error al desasignar la página: {e}')
+        return redirect('sapy:application_pages', pk=application.pk)
+
+    # Obtener páginas asignadas
+    assigned_pages = application.assigned_pages.select_related('page').all()
+
+    # Búsqueda de páginas disponibles (excluyendo las ya asignadas)
+    assigned_ids = assigned_pages.values_list('page_id', flat=True)
+    available_pages = Page.objects.exclude(id__in=assigned_ids).order_by('slug')
+    search_query = request.GET.get('search', '')
+    if search_query:
+        q = search_query.strip().lower()
+        available_pages = available_pages.filter(models.Q(slug__icontains=q) | models.Q(title__icontains=q))
+
+    context = {
+        'application': application,
+        'assigned_pages': assigned_pages,
+        'available_pages': available_pages,
+        'search_query': search_query,
+        'title': f'Páginas de {application.display_name}',
+    }
+    return render(request, 'application_pages.html', context)
+
+
+@login_required
+def application_pages_search(request, pk):
+    """Devuelve JSON con páginas disponibles filtradas por 'q' para asignar a la app dada."""
+    application = get_object_or_404(Application, pk=pk)
+    q = (request.GET.get('q') or '').strip()
+    assigned_ids = application.assigned_pages.values_list('page_id', flat=True)
+    qs = Page.objects.exclude(id__in=assigned_ids)
+    if q:
+        qs = qs.filter(models.Q(slug__icontains=q) | models.Q(title__icontains=q))
+    qs = qs.order_by('slug')[:20]
+    data = [
+        {
+            'id': p.id,
+            'slug': p.slug,
+            'title': p.title,
+            'source_type': p.source_type,
+            'route_path': p.route_path,
+        }
+        for p in qs
+    ]
+    return JsonResponse({'results': data})
+
+
+@login_required
+def application_menus(request, pk):
+    application = get_object_or_404(Application, pk=pk)
+    # Gestión de asignación/desasignación
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        menu_id = request.POST.get('menu_id')
+        if action == 'assign' and menu_id:
+            try:
+                menu = get_object_or_404(Menu, pk=menu_id)
+                if application.assigned_menus.filter(menu=menu).exists():
+                    messages.warning(request, f'El menú "{menu.title}" ya está asignado a esta aplicación.')
+                else:
+                    ApplicationMenu.objects.create(application=application, menu=menu)
+                    messages.success(request, f'Menú "{menu.title}" asignado a la aplicación.')
+            except Exception as e:
+                messages.error(request, f'Error al asignar el menú: {e}')
+        elif action == 'unassign' and menu_id:
+            try:
+                am = application.assigned_menus.filter(menu_id=menu_id).first()
+                if am:
+                    title = am.menu.title
+                    am.delete()
+                    messages.success(request, f'Menú "{title}" desasignado de la aplicación.')
+            except Exception as e:
+                messages.error(request, f'Error al desasignar el menú: {e}')
+        return redirect('sapy:application_menus', pk=application.pk)
+
+    assigned = application.assigned_menus.select_related('menu').all()
+    # Menús disponibles
+    assigned_ids = assigned.values_list('menu_id', flat=True)
+    available = Menu.objects.exclude(id__in=assigned_ids).filter(activo=True).order_by('name')
+    # Búsqueda
+    search_query = request.GET.get('search', '')
+    if search_query:
+        available = available.filter(models.Q(name__icontains=search_query) | models.Q(title__icontains=search_query))
+
+    # Para cada menú asignado, construir detalles de sus páginas y checks por página
+    details = []
+    for am in assigned:
+        pages = am.menu.menu_pages.select_related('page').order_by('section', 'order_index')
+        page_infos = []
+        for mp in pages:
+            p = mp.page
+            # Existe ruta en app destino? Reutilizamos route_path de Page
+            # Para este generador, tratamos ruta como declarativa; marcamos 'exists' si el proyecto destino está desplegado y la ruta responde 200 (opcional). Por ahora indicamos N/D.
+            route_exists = None  # N/D
+            # Si es página basada en tabla, verificar registros
+            records = 'N/D'
+            if p.source_type == 'dbtable' and p.db_table_id:
+                # Verificar existencia tabla y contar registros
+                exists = check_table_exists_in_app(application, p.db_table)
+                if exists:
+                    cnt = get_table_record_count(application, p.db_table)
+                    records = str(cnt if cnt is not None else '0')
+                else:
+                    records = 'N/D'
+            page_infos.append({
+                'title': p.title,
+                'slug': p.slug,
+                'icon': p.icon,
+                'route_path': p.route_path,
+                'section': mp.section or '1',
+                'order_index': mp.order_index,
+                'route_exists': route_exists,
+                'records': records,
+            })
+        details.append({
+            'menu': am.menu,
+            'pages': page_infos,
+        })
+
+    context = {
+        'application': application,
+        'assigned_menus': details,
+        'available_menus': available,
+        'search_query': search_query,
+        'title': f'Menús de {application.display_name}',
+    }
+    return render(request, 'application_menus.html', context)
+
+
+@login_required
+def application_menus_search(request, pk):
+    application = get_object_or_404(Application, pk=pk)
+    q = (request.GET.get('q') or '').strip()
+    assigned_ids = application.assigned_menus.values_list('menu_id', flat=True)
+    qs = Menu.objects.filter(activo=True).exclude(id__in=assigned_ids)
+    if q:
+        qs = qs.filter(models.Q(name__icontains=q) | models.Q(title__icontains=q))
+    qs = qs.order_by('name')[:20]
+    data = [
+        {
+            'id': m.id,
+            'name': m.name,
+            'title': m.title,
+            'icon': m.icon,
+        }
+        for m in qs
+    ]
+    return JsonResponse({'results': data})
+
 # ==== PAGES: generación desde DbTable y lectura de configuración efectiva ====
 
 @login_required
@@ -1521,23 +1744,97 @@ def page_effective_config(request, page_id: int):
                         # Derivar on-the-fly para visualización (sin persistir si falla)
                         try:
                             d = _derive_form_question_defaults(col)
+                            # Construir opciones para selects FK
+                            options = []
+                            try:
+                                if (d.get('input_type') == 'select' and d.get('options_source') == 'fk' and d.get('fk_table')):
+                                    fk_tbl = d.get('fk_table')
+                                    value_field = d.get('fk_value_field', 'id')
+                                    label_field = d.get('fk_label_field', 'nombre')
+                                    from django.db import connection
+                                    table_ident = _quote_ident(getattr(fk_tbl, 'schema_name', 'public')) + '.' + _quote_ident(fk_tbl.name)
+                                    sql1 = f'SELECT {_quote_ident(value_field)} as v, {_quote_ident(label_field)} as l FROM {table_ident} WHERE "activo" = true ORDER BY {_quote_ident(label_field)} LIMIT 200'
+                                    sql2 = f'SELECT {_quote_ident(value_field)} as v, {_quote_ident(label_field)} as l FROM {table_ident} ORDER BY {_quote_ident(label_field)} LIMIT 200'
+                                    try:
+                                        with connection.cursor() as cur:
+                                            cur.execute(sql1)
+                                            options = [{'value': r[0], 'label': str(r[1])} for r in cur.fetchall()]
+                                    except Exception:
+                                        try:
+                                            with connection.cursor() as cur:
+                                                cur.execute(sql2)
+                                                options = [{'value': r[0], 'label': str(r[1])} for r in cur.fetchall()]
+                                        except Exception:
+                                            options = []
+                            except Exception:
+                                options = []
+                            # Metadatos para archivo/imagen
+                            accept = None
+                            preview = False
+                            if d.get('input_type') == 'file':
+                                if col.name == 'imagen':
+                                    accept = 'image/*'
+                                    preview = True
+                                else:
+                                    accept = '*/*'
                             fields.append({
                                 'name': d['name'],
                                 'label': d['question_text'].rstrip(':'),
                                 'required': d['required'],
                                 'placeholder': d['placeholder'],
                                 'css_class': d['css_class'],
+                                'input_type': d.get('input_type', 'text'),
+                                'options': options,
+                                'accept': accept,
+                                'preview': preview,
                             })
                             continue
                         except Exception:
                             pass
                     if fq:
+                        # Construir opciones para selects FK desde FormQuestion
+                        options = []
+                        try:
+                            if (fq.input_type == 'select' and fq.options_source == fq.OptionsSource.FK and fq.fk_table_id):
+                                from django.db import connection
+                                value_field = fq.fk_value_field or 'id'
+                                label_field = fq.fk_label_field or 'nombre'
+                                fk_tbl = fq.fk_table
+                                table_ident = _quote_ident(getattr(fk_tbl, 'schema_name', 'public')) + '.' + _quote_ident(fk_tbl.name)
+                                sql1 = f'SELECT {_quote_ident(value_field)} as v, {_quote_ident(label_field)} as l FROM {table_ident} WHERE "activo" = true ORDER BY {_quote_ident(label_field)} LIMIT 200'
+                                sql2 = f'SELECT {_quote_ident(value_field)} as v, {_quote_ident(label_field)} as l FROM {table_ident} ORDER BY {_quote_ident(label_field)} LIMIT 200'
+                                try:
+                                    with connection.cursor() as cur:
+                                        cur.execute(sql1)
+                                        options = [{'value': r[0], 'label': str(r[1])} for r in cur.fetchall()]
+                                except Exception:
+                                    try:
+                                        with connection.cursor() as cur:
+                                            cur.execute(sql2)
+                                            options = [{'value': r[0], 'label': str(r[1])} for r in cur.fetchall()]
+                                    except Exception:
+                                        options = []
+                        except Exception:
+                            options = []
+                        # Metadatos para archivo/imagen
+                        accept = None
+                        preview = False
+                        if fq.input_type == 'file':
+                            if col.name == 'imagen':
+                                accept = 'image/*'
+                                preview = True
+                            else:
+                                accept = '*/*'
                         fields.append({
                             'name': fq.name,
                             'label': fq.question_text.rstrip(':'),
                             'required': fq.required,
                             'placeholder': fq.placeholder,
                             'css_class': fq.css_class,
+                            'input_type': fq.input_type,
+                            'options': options,
+                            'accept': accept,
+                            'preview': preview,
                         })
             form_cfg = {
                 'layout_columns_per_row': mf.layout_columns_per_row,
@@ -1592,6 +1889,268 @@ def pages_list(request):
         'pages': pages,
         'title': 'Gestión de Páginas',
     })
+
+
+@login_required
+def menus_list(request):
+    menus = Menu.objects.all().order_by('name')
+    return render(request, 'menus_list.html', {
+        'menus': menus,
+        'title': 'Menús de Navegación',
+    })
+
+
+@login_required
+def menu_create(request):
+    if request.method == 'POST':
+        name = (request.POST.get('name') or '').strip().lower()
+        title = (request.POST.get('title') or '').strip()
+        icon = (request.POST.get('icon') or '').strip()
+        if not name or not title:
+            messages.error(request, 'Nombre y Título son obligatorios')
+        else:
+            try:
+                m = Menu.objects.create(name=name, title=title, icon=icon)
+                messages.success(request, f'Menú "{m.title}" creado.')
+                return redirect('sapy:menu_detail', menu_id=m.id)
+            except Exception as e:
+                messages.error(request, f'Error creando menú: {e}')
+    return render(request, 'menu_form.html', {'title': 'Nuevo Menú'})
+
+
+@login_required
+def menu_detail(request, menu_id: int):
+    menu = get_object_or_404(Menu, pk=menu_id)
+    assigned = menu.menu_pages.select_related('page').order_by('section', 'order_index', 'page__slug')
+    # Páginas disponibles (excluyendo las ya asignadas)
+    assigned_ids = assigned.values_list('page_id', flat=True)
+    available = Page.objects.exclude(id__in=assigned_ids).order_by('slug')
+    search_query = request.GET.get('search', '')
+    if search_query:
+        q = search_query.strip()
+        available = available.filter(models.Q(slug__icontains=q) | models.Q(title__icontains=q))
+    return render(request, 'menu_detail.html', {
+        'menu': menu,
+        'assigned': assigned,
+        'available': available,
+        'search_query': search_query,
+        'title': f'Menú: {menu.title}',
+    })
+
+
+@login_required
+@require_POST
+def menu_update(request, menu_id: int):
+    menu = get_object_or_404(Menu, pk=menu_id)
+    menu.title = (request.POST.get('title') or menu.title).strip()
+    menu.icon = (request.POST.get('icon') or menu.icon).strip()
+    activo = request.POST.get('activo')
+    if activo is not None:
+        menu.activo = (activo.lower() == 'true')
+    menu.save()
+    messages.success(request, 'Menú actualizado')
+    return redirect('sapy:menu_detail', menu_id=menu.id)
+
+
+@login_required
+@require_POST
+def menu_assign_page(request, menu_id: int):
+    menu = get_object_or_404(Menu, pk=menu_id)
+    page_id = request.POST.get('page_id')
+    section = (request.POST.get('section') or '1').strip()
+    try:
+        pg = get_object_or_404(Page, pk=int(page_id))
+        # Calcular order_index siguiente dentro de la sección
+        max_order = menu.menu_pages.filter(section=section).aggregate(m=models.Max('order_index'))['m'] or 0
+        MenuPage.objects.create(menu=menu, page=pg, section=section, order_index=max_order + 1)
+        messages.success(request, f'Página "{pg.title}" asignada al menú.')
+    except Exception as e:
+        messages.error(request, f'Error al asignar página: {e}')
+    return redirect('sapy:menu_detail', menu_id=menu.id)
+
+
+@login_required
+@require_POST
+def menu_unassign_page(request, menu_id: int):
+    menu = get_object_or_404(Menu, pk=menu_id)
+    page_id = request.POST.get('page_id')
+    try:
+        mp = menu.menu_pages.filter(page_id=page_id).first()
+        if mp:
+            mp.delete()
+            messages.success(request, 'Página desasignada del menú.')
+    except Exception as e:
+        messages.error(request, f'Error al desasignar página: {e}')
+    return redirect('sapy:menu_detail', menu_id=menu.id)
+
+
+@login_required
+@require_POST
+def menu_page_update(request, menu_id: int):
+    """Actualiza sección u orden de una página asignada individualmente."""
+    menu = get_object_or_404(Menu, pk=menu_id)
+    page_id = request.POST.get('page_id')
+    new_section = (request.POST.get('section') or '').strip()
+    new_order = request.POST.get('order_index')
+    mp = menu.menu_pages.filter(page_id=page_id).first()
+    if not mp:
+        return JsonResponse({'success': False, 'message': 'Asignación no encontrada'}, status=404)
+    updated = False
+    if new_section is not None:
+        mp.section = new_section or '1'
+        updated = True
+    try:
+        if new_order is not None:
+            mp.order_index = int(new_order)
+            updated = True
+    except Exception:
+        pass
+    if updated:
+        mp.save(update_fields=['section', 'order_index', 'updated_at'])
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+def menu_pages_reorder(request, menu_id: int):
+    """Reordena todas las páginas asignadas: recibe lista de ids y su orden y opcionalmente sección."""
+    import json
+    menu = get_object_or_404(Menu, pk=menu_id)
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        items = payload.get('items') or []  # [{page_id, order_index, section?}]
+        if not isinstance(items, list):
+            return JsonResponse({'success': False, 'message': 'Formato inválido'}, status=400)
+        updated = []
+        for it in items:
+            pid = it.get('page_id')
+            order_i = it.get('order_index')
+            section = it.get('section')
+            mp = menu.menu_pages.filter(page_id=pid).first()
+            if not mp:
+                continue
+            if section is not None:
+                mp.section = (str(section) or '1')
+            try:
+                if order_i is not None:
+                    mp.order_index = int(order_i)
+            except Exception:
+                pass
+            updated.append(mp)
+        if updated:
+            MenuPage.objects.bulk_update(updated, ['section', 'order_index'])
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@login_required
+def menu_pages_search(request, menu_id: int):
+    menu = get_object_or_404(Menu, pk=menu_id)
+    q = (request.GET.get('q') or '').strip()
+    assigned_ids = menu.menu_pages.values_list('page_id', flat=True)
+    qs = Page.objects.exclude(id__in=assigned_ids)
+    if q:
+        qs = qs.filter(models.Q(slug__icontains=q) | models.Q(title__icontains=q))
+    qs = qs.order_by('slug')[:30]
+    data = [
+        {'id': p.id, 'slug': p.slug, 'title': p.title, 'route_path': p.route_path, 'icon': p.icon}
+        for p in qs
+    ]
+    return JsonResponse({'results': data})
+
+
+@login_required
+def icons_search(request):
+    """Busca íconos en BD por proveedor/clase/etiquetas. Retorna JSON para el picker."""
+    q = (request.GET.get('q') or '').strip().lower()
+    provider = (request.GET.get('provider') or '').strip()
+    qs = Icon.objects.filter(activo=True)
+    if provider in ['bi', 'fa']:
+        qs = qs.filter(provider=provider)
+    if q:
+        qs = qs.filter(
+            models.Q(class_name__icontains=q) |
+            models.Q(name__icontains=q) |
+            models.Q(label__icontains=q) |
+            models.Q(tags__icontains=q)
+        )
+    limit = 400
+    try:
+        limit = max(50, min(800, int(request.GET.get('limit') or limit)))
+    except Exception:
+        limit = 400
+    qs = qs.order_by('provider', 'class_name')[:limit]
+    data = [
+        {
+            'class_name': ic.class_name,
+            'label': ic.label,
+            'tags': ic.tags,
+            'name': ic.name,
+            'provider': ic.provider,
+            'style': ic.style,
+            'library': ic.library,
+        }
+        for ic in qs
+    ]
+    return JsonResponse({'results': data})
+
+
+@login_required
+def icons_list(request):
+    q = (request.GET.get('q') or '').strip()
+    provider = (request.GET.get('provider') or '').strip()
+    qs = Icon.objects.all().order_by('provider', 'class_name')
+    if provider in ['bi','fa']:
+        qs = qs.filter(provider=provider)
+    if q:
+        qs = qs.filter(models.Q(class_name__icontains=q) | models.Q(label__icontains=q) | models.Q(tags__icontains=q))
+    return render(request, 'icons_list.html', {
+        'icons': qs[:500],
+        'q': q,
+        'provider': provider,
+        'title': 'Catálogo de Íconos',
+    })
+
+
+@login_required
+def icons_import(request):
+    """Importa íconos en bloque desde texto pegado (una clase por línea) u opcionalmente con prefijo de proveedor.
+    Formatos aceptados por línea:
+      - bi bi-people
+      - fas fa-user
+      - fa|fas fa-user (provider explícito al inicio separado por '|')
+    """
+    if request.method == 'POST':
+        raw = (request.POST.get('payload') or '').strip()
+        default_provider = (request.POST.get('provider') or '').strip()
+        count = 0
+        errors = 0
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            prov = default_provider if default_provider in ['bi','fa'] else ''
+            cls = line
+            # Permitir indicar provider al inicio: fa|fas fa-user
+            if '|' in line:
+                head, _, rest = line.partition('|')
+                head = head.strip().lower()
+                rest = rest.strip()
+                if head in ['fa','bi']:
+                    prov = head
+                    cls = rest
+            # Inferir provider por prefijo de clase
+            if not prov:
+                prov = 'fa' if cls.startswith('fa') else ('bi' if cls.startswith('bi') else 'bi')
+            try:
+                Icon.objects.get_or_create(class_name=cls, defaults={'provider': prov})
+                count += 1
+            except Exception:
+                errors += 1
+        messages.success(request, f'Importación finalizada. Agregados/existentes: {count}. Errores: {errors}.')
+        return redirect('sapy:icons_list')
+    return render(request, 'icons_import.html', {'title': 'Importar Íconos'})
 
 
 @login_required
@@ -1674,11 +2233,20 @@ def page_update(request, page_id: int):
     """Actualiza propiedades básicas de la página (por ahora solo título)."""
     page = get_object_or_404(Page, pk=page_id)
     new_title = (request.POST.get('title') or '').strip()
+    new_icon = (request.POST.get('icon') or '').strip()
     table_title = (request.POST.get('table_title') or '').strip()
+    updated_fields = []
     if new_title:
         page.title = new_title
-        page.save(update_fields=['title', 'updated_at'])
-        messages.success(request, 'Título de la página actualizado')
+        updated_fields.append('title')
+    # Permitir limpiar icono enviando cadena vacía explícita
+    if request.POST.get('icon') is not None:
+        page.icon = new_icon
+        updated_fields.append('icon')
+    if updated_fields:
+        updated_fields.append('updated_at')
+        page.save(update_fields=updated_fields)
+        messages.success(request, 'Página actualizada')
     # Guardar título de la tabla si existe PageTable
     if table_title and hasattr(page, 'page_tables'):
         pt = page.page_tables.first()

@@ -15,86 +15,16 @@
     <!-- CSS personalizado para formularios -->
     <link rel="stylesheet" href="{% static 'css/form-grid.css' %}">
     
-    <!-- CSS inline como respaldo -->
-    <style>
-    /* Sistema de Grid para Formularios basado en fracciones */
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
+    <!-- CSS personalizado del tema SapyMX -->
+    <link rel="stylesheet" href="{% static 'css/sapy-theme.css' %}">
     
-    .form-grid .field {
-      min-height: 60px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-    
-    /* Fracciones del grid */
-    .field-1-1 { grid-column: span 12; }    /* 100% - Campo completo */
-    .field-1-2 { grid-column: span 6; }     /* 50% - Mitad */
-    .field-1-3 { grid-column: span 4; }     /* 33.33% - Un tercio */
-    .field-2-3 { grid-column: span 8; }     /* 66.66% - Dos tercios */
-    .field-1-4 { grid-column: span 3; }     /* 25% - Un cuarto */
-    .field-3-4 { grid-column: span 9; }     /* 75% - Tres cuartos */
-    .field-1-6 { grid-column: span 2; }     /* 16.66% - Un sexto */
-    .field-5-6 { grid-column: span 10; }    /* 83.33% - Cinco sextos */
-    
-    /* Responsive - en móviles todos los campos ocupan el ancho completo */
-    @media (max-width: 768px) {
-      .form-grid .field {
-        grid-column: span 12 !important;
-      }
-    }
-    
-    /* Estilos para campos del formulario */
-    .form-grid .field label {
-      font-weight: 500;
-      margin-bottom: 0.5rem;
-      color: #495057;
-    }
-    
-    .form-grid .field input,
-    .form-grid .field select,
-    .form-grid .field textarea {
-      width: 100%;
-      padding: 0.5rem;
-      border: 1px solid #ced4da;
-      border-radius: 0.25rem;
-      font-size: 0.9rem;
-    }
-    
-    .form-grid .field input:focus,
-    .form-grid .field select:focus,
-    .form-grid .field textarea:focus {
-      border-color: #80bdff;
-      outline: 0;
-      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    }
-    
-    /* Indicador visual de campo requerido */
-    .form-grid .field.required label::after {
-      content: " *";
-      color: #dc3545;
-      font-weight: bold;
-    }
-    
-    /* Estilos para el modal de previsualización */
-    .modal .form-grid {
-      margin-bottom: 0;
-    }
-    
-    .modal .form-grid .field {
-      min-height: 50px;
-    }
-    </style>
+    <!-- CSS de componentes específicos -->
+    <link rel="stylesheet" href="{% static 'css/sapy-components.css' %}">
     
     <title>{% block title %}SAPY - Sistema Generador ERP{% endblock %}</title>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: var(--sapy-primary)!important;">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-boxes"></i> Sistema Generador ERP
@@ -138,10 +68,22 @@
                                                     <!-- Plantillas eliminadas - ya no son necesarias -->
                         </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'sapy:pages_list' %}">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-file-earmark-text"></i> Páginas
                         </a>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'sapy:pages_list' %}"><i class="bi bi-file-earmark-text"></i> Listado de Páginas</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'sapy:menus_list' %}"><i class="bi bi-list"></i> Menús</a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'sapy:icons_list' %}"><i class="bi bi-images"></i> Íconos</a>
+                            </li>
+                        </ul>
                     </li>
                 </ul>
                 <ul class="navbar-nav">
@@ -188,6 +130,9 @@
 
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- JavaScript común de SapyMX -->
+    <script src="{% static 'js/sapy-common.js' %}"></script>
     
     <!-- SweetAlert2 Utilities -->
     <script>

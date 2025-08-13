@@ -8,37 +8,45 @@
 <div class="container-fluid py-4">
     <div class="row">
         <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
-                    <h4 class="mb-0">
-                        <i class="bi bi-grid-3x3-gap-fill me-2"></i>
+            <div class="sapy-table-container">
+                <div class="sapy-table-header">
+                    <h4 class="sapy-btn-icon">
+                        <i class="bi bi-grid-3x3-gap-fill"></i>
                         Aplicaciones ERP Generadas
                     </h4>
-                    <a href="{% url 'sapy:application_create' %}" class="btn btn-light btn-sm w-100 w-md-auto">
-                        <i class="bi bi-plus-circle me-1"></i>
-                        Nueva Aplicación
-                    </a>
+                    <div class="sapy-table-actions">
+                        <a href="{% url 'sapy:application_create' %}" class="btn btn-light sapy-btn-icon">
+                            <i class="bi bi-plus-circle"></i>
+                            Nueva Aplicación
+                        </a>
+                    </div>
                 </div>
-                 <div class="card-body">
+                <div class="table-responsive">
                     {% if applications %}
-                    <!-- Vista móvil: tarjetas -->
-                    <div class="d-block d-md-none">
+                    <!-- Vista móvil: tarjetas estandarizadas -->
+                    <div class="sapy-mobile-view">
                         {% for app in applications %}
-                        <div class="card mb-2">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <strong>{{ app.display_name }}</strong>
-                                    <span class="badge bg-secondary text-uppercase">{{ app.db_engine }}</span>
+                        <div class="sapy-mobile-card">
+                            <div class="sapy-mobile-card-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="sapy-mobile-card-title">{{ app.display_name }}</div>
+                                        <div class="sapy-mobile-card-subtitle">
+                                            <span class="text-muted">{{ app.name }}</span>
+                                        </div>
+                                    </div>
+                                    <span class="fw-medium text-muted">{{ app.db_engine }}</span>
                                 </div>
-                                <div class="text-muted small mb-1">{{ app.name }}</div>
-                                <div class="mb-1">
-                                    <a href="http://{{ app.domain }}:{{ app.port }}" target="_blank" class="text-decoration-none small">
-                                        {{ app.domain }}:{{ app.port }} <i class="bi bi-box-arrow-up-right small"></i>
+                            </div>
+                            <div class="sapy-mobile-card-body">
+                                <div class="mb-2">
+                                    <a href="http://{{ app.domain }}:{{ app.port }}" target="_blank" class="text-decoration-none sapy-text-code">
+                                        {{ app.domain }}:{{ app.port }} <i class="bi bi-box-arrow-up-right"></i>
                                     </a>
                                 </div>
-                                <div class="mb-2">
+                                <div>
                                     {% if app.status == 'deployed' %}
-                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Desplegada</span>
+                                        <span class="sapy-badge sapy-badge-status-active"><i class="bi bi-check-circle"></i> Desplegada</span>
                                     {% elif app.status == 'installing' %}
                                         <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Instalando</span>
                                     {% elif app.status == 'error' %}
@@ -46,33 +54,34 @@
                                     {% elif app.status == 'draft' %}
                                         <span class="badge bg-info text-dark"><i class="bi bi-pencil"></i> En Diseño</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">{{ app.get_status_display }}</span>
+                                        <span class="sapy-badge sapy-badge-status-inactive">{{ app.get_status_display }}</span>
                                     {% endif %}
                                 </div>
-                                <div class="d-flex gap-2">
-                                    <a href="{% url 'sapy:application_detail' app.pk %}" class="btn btn-sm btn-outline-primary flex-fill">
-                                        <i class="bi bi-eye"></i> Ver
-                                    </a>
-                                    <a href="{% url 'sapy:application_edit' app.pk %}" class="btn btn-sm btn-outline-secondary flex-fill">
-                                        <i class="bi bi-pencil"></i> Editar
-                                    </a>
-                                </div>
+                            </div>
+                            <div class="sapy-mobile-card-actions">
+                                <a href="{% url 'sapy:application_detail' app.pk %}" class="btn btn-sm btn-outline-primary flex-fill sapy-btn-icon">
+                                    <i class="bi bi-eye"></i> Ver
+                                </a>
+                                <a href="{% url 'sapy:application_edit' app.pk %}" class="btn btn-sm btn-outline-secondary flex-fill sapy-btn-icon">
+                                    <i class="bi bi-pencil"></i> Editar
+                                </a>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
 
-                    <!-- Vista desktop: tabla -->
-                    <div class="table-responsive d-none d-md-block">
-                        <table class="table table-hover align-middle">
+                    <!-- Vista desktop: tabla estandarizada -->
+                    <div class="sapy-desktop-view">
+                      <div class="table-responsive">
+                        <table class="sapy-table table table-hover align-middle">
                             <thead>
                                 <tr>
                                     <th>Aplicación</th>
                                     <th>Dominio</th>
                                     <th>Base de Datos</th>
-                                    <th>Estado</th>
+                                    <th class="sapy-col-status">Estado</th>
                                     <th>Creada</th>
-                                    <th class="text-center">Acciones</th>
+                                    <th class="sapy-col-actions">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -85,25 +94,25 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <a href="http://{{ app.domain }}:{{ app.port }}" target="_blank" class="text-decoration-none">
+                                        <a href="http://{{ app.domain }}:{{ app.port }}" target="_blank" class="text-decoration-none sapy-text-code">
                                             {{ app.domain }}:{{ app.port }}
                                             <i class="bi bi-box-arrow-up-right small"></i>
                                         </a>
                                     </td>
                                     <td>
-                                        <small>
-                                            <span class="badge bg-secondary">{{ app.db_engine }}</span>
-                                            {{ app.db_name }}
-                                        </small>
+                                        <div>
+                                            <span class="fw-medium text-muted">{{ app.db_engine }}</span>
+                                            <small class="sapy-text-muted d-block">{{ app.db_name }}</small>
+                                        </div>
                                     </td>
-                                    <td>
+                                    <td class="sapy-col-status">
                                         {% if app.status == 'deployed' %}
-                                            <span class="badge bg-success">
+                                            <span class="sapy-badge sapy-badge-status-active">
                                                 <i class="bi bi-check-circle"></i> Desplegada
                                             </span>
                                         {% elif app.status == 'installing' %}
                                             <span class="badge bg-warning">
-                                                <i class="bi bi-hourglass-split"></i> Instalando...
+                                                <i class="bi bi-hourglass-split"></i> Instalando
                                             </span>
                                         {% elif app.status == 'error' %}
                                             <span class="badge bg-danger">
@@ -114,24 +123,24 @@
                                                 <i class="bi bi-pencil"></i> En Diseño
                                             </span>
                                         {% else %}
-                                            <span class="badge bg-secondary">{{ app.get_status_display }}</span>
+                                            <span class="sapy-badge sapy-badge-status-inactive">{{ app.get_status_display }}</span>
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <small>{{ app.created_at|date:"d/m/Y H:i" }}</small>
+                                        <small class="sapy-text-muted">{{ app.created_at|date:"d/m/Y H:i" }}</small>
                                     </td>
-                                    <td class="text-center">
-                                        <div class="btn-group btn-group-sm" role="group">
+                                    <td class="sapy-col-actions">
+                                        <div class="sapy-btn-group">
                                             <a href="{% url 'sapy:application_detail' app.pk %}" 
-                                               class="btn btn-outline-primary" title="Ver detalles">
+                                               class="btn btn-sm btn-outline-primary sapy-btn-icon" title="Ver detalles">
                                                 <i class="bi bi-eye"></i>
                                             </a>
                                             <a href="{% url 'sapy:application_edit' app.pk %}" 
-                                               class="btn btn-outline-secondary" title="Editar">
+                                               class="btn btn-sm btn-outline-secondary sapy-btn-icon" title="Editar">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
                                             {% if app.status == 'draft' or app.status == 'error' %}
-                                            <button type="button" class="btn btn-outline-success" 
+                                            <button type="button" class="btn btn-sm btn-outline-success sapy-btn-icon" 
                                                     onclick="deployApp({{ app.pk }})" title="Instalar">
                                                 <i class="bi bi-play-circle"></i>
                                             </button>
@@ -142,13 +151,17 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+                      </div>
                     </div>
                     {% else %}
-                    <div class="text-center py-5">
-                        <i class="bi bi-inbox display-1 text-muted"></i>
-                        <p class="mt-3 text-muted">No hay aplicaciones registradas aún</p>
-                        <a href="{% url 'sapy:application_create' %}" class="btn btn-primary">
-                            <i class="bi bi-plus-circle me-1"></i>
+                    <div class="sapy-empty-state">
+                        <div class="sapy-empty-state-icon">
+                            <i class="bi bi-inbox"></i>
+                        </div>
+                        <div class="sapy-empty-state-title">No hay aplicaciones registradas</div>
+                        <div class="sapy-empty-state-text">Comienza creando tu primera aplicación ERP</div>
+                        <a href="{% url 'sapy:application_create' %}" class="btn btn-primary sapy-btn-icon">
+                            <i class="bi bi-plus-circle"></i>
                             Crear Primera Aplicación
                         </a>
                     </div>
@@ -158,7 +171,9 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
 function deployApp(appId) {
     if (confirm('¿Estás seguro de que quieres instalar esta aplicación?')) {

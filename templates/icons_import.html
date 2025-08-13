@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>{{ title }}</strong>
+      <a href="{% url 'sapy:icons_list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+    </div>
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Proveedor por defecto</label>
+            <select name="provider" class="form-select">
+              <option value="">(Inferir por clase)</option>
+              <option value="bi">Bootstrap Icons</option>
+              <option value="fa">Font Awesome</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Clases (una por línea)</label>
+            <textarea name="payload" class="form-control" rows="12" placeholder="bi bi-people
+fas fa-user
+fa|fas fa-user-cog"></textarea>
+            <div class="form-text">Puedes anteponer "bi|" o "fa|" para forzar proveedor en esa línea.</div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary"><i class="bi bi-upload"></i> Importar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+
