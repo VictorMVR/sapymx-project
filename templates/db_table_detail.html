@@ -73,8 +73,8 @@
             <th>#</th>
             <th>Nombre</th>
             <th>Tipo</th>
-            <th>Longitud/Prec</th>
-            <th>Nullable</th>
+            <th>Long</th>
+            <th>Null</th>
             <th>Única</th>
             <th>Índice</th>
             <th>PK</th>
@@ -93,12 +93,28 @@
             <td>
               {% if tc.column.length %}{{ tc.column.length }}{% elif tc.column.numeric_precision %}{{ tc.column.numeric_precision }}{% if tc.column.numeric_scale %},{{ tc.column.numeric_scale }}{% endif %}{% endif %}
             </td>
-            <td>{% if tc.is_nullable is not None %}{{ tc.is_nullable|yesno:"Sí,No" }}{% else %}{{ tc.column.is_nullable|yesno:"Sí,No" }}{% endif %}</td>
-            <td>{% if tc.is_unique is not None %}{{ tc.is_unique|yesno:"Sí,No" }}{% else %}{{ tc.column.is_unique|yesno:"Sí,No" }}{% endif %}</td>
-            <td>{% if tc.is_index is not None %}{{ tc.is_index|yesno:"Sí,No" }}{% else %}{{ tc.column.is_index|yesno:"Sí,No" }}{% endif %}</td>
+            <td>
+              <button type="button" class="btn btn-sm toggle-inline" data-field="is_nullable" data-id="{{ tc.id }}">
+                {% if tc.is_nullable is not None %}{{ tc.is_nullable|yesno:"Sí,No" }}{% else %}{{ tc.column.is_nullable|yesno:"Sí,No" }}{% endif %}
+              </button>
+            </td>
+            <td>
+              <button type="button" class="btn btn-sm toggle-inline" data-field="is_unique" data-id="{{ tc.id }}">
+                {% if tc.is_unique is not None %}{{ tc.is_unique|yesno:"Sí,No" }}{% else %}{{ tc.column.is_unique|yesno:"Sí,No" }}{% endif %}
+              </button>
+            </td>
+            <td>
+              <button type="button" class="btn btn-sm toggle-inline" data-field="is_index" data-id="{{ tc.id }}">
+                {% if tc.is_index is not None %}{{ tc.is_index|yesno:"Sí,No" }}{% else %}{{ tc.column.is_index|yesno:"Sí,No" }}{% endif %}
+              </button>
+            </td>
             <td>{% if tc.is_primary_key is not None %}{{ tc.is_primary_key|yesno:"Sí,No" }}{% else %}{{ tc.column.is_primary_key|yesno:"Sí,No" }}{% endif %}</td>
             <td>{% if tc.is_auto_increment is not None %}{{ tc.is_auto_increment|yesno:"Sí,No" }}{% else %}{{ tc.column.is_auto_increment|yesno:"Sí,No" }}{% endif %}</td>
-            <td><code>{% if tc.default_value %}{{ tc.default_value }}{% else %}{{ tc.column.default_value }}{% endif %}</code></td>
+            <td>
+              <input type="text" class="form-control form-control-sm default-inline" data-id="{{ tc.id }}"
+                     value="{% if tc.default_value %}{{ tc.default_value }}{% else %}{{ tc.column.default_value }}{% endif %}"
+                     placeholder="(default)" />
+            </td>
             <td>{% if tc.references_table %}{{ tc.fk_constraint_name }}{% else %}-{% endif %}</td>
             <td class="text-end">
               <form method="post" action="{% url 'sapy:db_table_column_delete' tc.pk %}" class="d-inline" onsubmit="return confirm('¿Desvincular columna {{ tc.column.name }}?');">
@@ -187,6 +203,46 @@ function getCookie(name){
   // Guardado en vivo: ya se hace en dragend
 })();
 
+// Inline toggles y default
+(function(){
+  function post(id, field, value){
+    const form = new FormData();
+    form.append('field', field);
+    form.append('value', value);
+    return fetch('{% url "sapy:db_table_column_inline_update" 0 %}'.replace('/0/','/' + id + '/'), {
+      method:'POST', headers:{ 'X-CSRFToken': getCookie('csrftoken') }, body: form
+    }).then(r=>r.json());
+  }
+
+  document.querySelectorAll('.toggle-inline').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      const field = btn.getAttribute('data-field');
+      const current = (btn.textContent || '').trim().toLowerCase() === 'sí';
+      const next = (!current);
+      try{
+        const res = await post(id, field, String(next));
+        if (res && res.success){ btn.textContent = next ? 'Sí' : 'No'; }
+        else alert(res.message || 'Error');
+      }catch(e){ alert('Error'); }
+    });
+  });
+
+  let typingTimer = null;
+  document.querySelectorAll('.default-inline').forEach(inp => {
+    inp.addEventListener('input', () => {
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(async () => {
+        const id = inp.getAttribute('data-id');
+        try{
+          const res = await post(id, 'default_value', inp.value || '');
+          if (!(res && res.success)) alert(res.message || 'Error');
+        }catch(e){ alert('Error'); }
+      }, 500);
+    });
+  });
+})();
+
 // Reordenar (móvil): botones subir/bajar y guardar
 (function(){
   const container = document.querySelector('.d-block.d-md-none');
@@ -262,11 +318,11 @@ function getCookie(name){
   const availableColumns = [
     {% for c in existing_columns %}
     {
-      name: '{{ c.name }}',
-      data_type: '{{ c.data_type }}',
-      length: '{{ c.length|default:"" }}',
-      notes: '{{ c.notes|default:"" }}'
-    },
+      name: '{{ c.name|escapejs }}',
+      data_type: '{{ c.data_type|escapejs }}',
+      length: '{{ c.length|default:""|escapejs }}',
+      notes: '{{ c.notes|default:""|escapejs }}'
+    }{% if not forloop.last %},{% endif %}
     {% endfor %}
   ];
 
@@ -290,7 +346,7 @@ function getCookie(name){
       matches.forEach(col => {
         const option = document.createElement('option');
         option.value = col.name;
-        option.textContent = `${col.name} (${col.data_type}${col.length ? `(${col.length})` : ''})`;
+        option.textContent = `${col.name} (${col.data_type}${col.length ? '(' + col.length + ')' : ''})`;
         resultsSelect.appendChild(option);
       });
       resultsSelect.style.display = 'block';

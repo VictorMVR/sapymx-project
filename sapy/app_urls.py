@@ -50,6 +50,7 @@ urlpatterns = [
     
     # Desvincular columnas de tablas
     path('db/table-columns/<int:pk>/delete/', views.db_table_column_delete, name='db_table_column_delete'),
+    path('db/table-columns/<int:pk>/inline-update/', views.db_table_column_inline_update, name='db_table_column_inline_update'),
 
     # Plantillas de columnas BD - ELIMINADAS
 
@@ -73,6 +74,13 @@ urlpatterns = [
     path('pages/menus/<int:menu_id>/pages/search/', views.menu_pages_search, name='menu_pages_search'),
     path('pages/menus/<int:menu_id>/pages/reorder/', views.menu_pages_reorder, name='menu_pages_reorder'),
     path('pages/menus/<int:menu_id>/page/update/', views.menu_page_update, name='menu_page_update'),
+
+    # Roles
+    path('pages/roles/', views.roles_list, name='roles_list'),
+    path('pages/roles/new/', views.role_create, name='role_create'),
+    path('pages/roles/<int:role_id>/', views.role_detail, name='role_detail'),
+    path('pages/roles/<int:role_id>/update/', views.role_update, name='role_update'),
+    path('pages/roles/<int:role_id>/menus/search/', views.role_menus_search, name='role_menus_search'),
 
     # Catálogo de íconos (para picker)
     path('icons/search/', views.icons_search, name='icons_search'),

@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <a class="btn btn-outline-secondary" href="{% url 'sapy:roles_list' %}"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header"><strong>Propiedades del Rol</strong></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'sapy:role_update' role.id %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label">Nombre</label>
+              <input class="form-control" value="{{ role.name }}" disabled />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Título</label>
+              <input name="title" class="form-control" value="{{ role.title }}" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Descripción</label>
+              <textarea name="description" rows="3" class="form-control">{{ role.description }}</textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Activo</label>
+              <select name="activo" class="form-select">
+                <option value="true" {% if role.activo %}selected{% endif %}>Sí</option>
+                <option value="false" {% if not role.activo %}selected{% endif %}>No</option>
+              </select>
+            </div>
+            <button class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header"><strong>Menús asignados</strong></div>
+        <div class="card-body">
+          {% if assigned %}
+          <div class="list-group list-group-flush">
+            {% for rm in assigned %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <div class="fw-semibold">{% if rm.menu.icon %}<i class="{{ rm.menu.icon }} me-1"></i>{% endif %} {{ rm.menu.title }}</div>
+                <div class="text-muted small"><code>{{ rm.menu.name }}</code></div>
+              </div>
+              <form method="post" class="d-inline" action="{% url 'sapy:role_detail' role.id %}" onsubmit="return confirm('¿Quitar menú del rol?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unassign" />
+                <input type="hidden" name="menu_id" value="{{ rm.menu.id }}" />
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i></button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-muted">Sin menús asignados</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header"><strong>Asignar Menú</strong></div>
+        <div class="card-body">
+          <form method="get" class="mb-3" onsubmit="return false;">
+            <div class="input-group">
+              <input id="menuSearch" type="text" class="form-control" placeholder="Buscar menú...">
+              <button class="btn btn-outline-secondary" type="button" onclick="triggerMenuSearch()"><i class="bi bi-search"></i></button>
+            </div>
+          </form>
+          <div id="menuResults"></div>
+          <div id="menuEmpty" class="text-center py-3 d-none text-muted">Sin resultados</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function debounce(fn,d){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), d); } }
+async function doMenuSearch(){
+  const q = (document.getElementById('menuSearch')?.value || '').trim();
+  const resultsEl = document.getElementById('menuResults');
+  const emptyEl = document.getElementById('menuEmpty');
+  if (!q){ resultsEl.innerHTML=''; emptyEl?.classList.add('d-none'); return; }
+  try{
+    const resp = await fetch('{% url "sapy:role_menus_search" role.id %}?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    const data = await resp.json();
+    const rows = (data.results || []).map(item => `
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">${item.icon ? `<i class=\"${item.icon} me-1\"></i>` : ''}${escapeHtml(item.title)}</div>
+          <div class="text-muted small"><code>${escapeHtml(item.name)}</code></div>
+        </div>
+        <form method="post" class="d-inline" action="{% url 'sapy:role_detail' role.id %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="assign" />
+          <input type="hidden" name="menu_id" value="${item.id}" />
+          <button class="btn btn-sm btn-outline-success"><i class="bi bi-plus-circle"></i> Asignar</button>
+        </form>
+      </div>
+    `).join('');
+    if (rows){ resultsEl.innerHTML = `<div class="list-group list-group-flush">${rows}</div>`; emptyEl?.classList.add('d-none'); }
+    else { resultsEl.innerHTML=''; emptyEl?.classList.remove('d-none'); }
+  }catch(e){ console.error(e); }
+}
+const triggerMenuSearch = ()=>doMenuSearch();
+document.getElementById('menuSearch')?.addEventListener('input', debounce(doMenuSearch, 250));
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+</script>
+{% endblock %}
+
+

@@ -1226,6 +1226,43 @@ class ApplicationMenu(models.Model):
         return f"{self.application.name} - {self.menu.name}"
 
 
+class Role(models.Model):
+    """Catálogo de roles internos del ERP (ej: vendedor, contador)."""
+
+    name = models.SlugField(max_length=100, unique=True, help_text='Identificador único en minúsculas, ej: vendedor')
+    title = models.CharField(max_length=150, help_text='Nombre visible, ej: Vendedor')
+    description = models.TextField(blank=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'app_generator_roles'
+        ordering = ['name']
+        verbose_name = 'Rol'
+        verbose_name_plural = 'Roles'
+
+    def __str__(self) -> str:  # pragma: no cover
+        return self.title or self.name
+
+
+class RoleMenu(models.Model):
+    """Relación Rol → Menú para autorización de navegación."""
+
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='menus')
+    menu = models.ForeignKey(Menu, on_delete=models.CASCADE, related_name='roles')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'app_generator_role_menus'
+        unique_together = [('role', 'menu')]
+        ordering = ['role__name', 'menu__name']
+        verbose_name = 'Menú por Rol'
+        verbose_name_plural = 'Menús por Rol'
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.role.name} → {self.menu.name}"
+
 class Icon(models.Model):
     class Provider(models.TextChoices):
         BOOTSTRAP = 'bi', 'Bootstrap Icons'

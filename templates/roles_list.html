@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">{{ title }}</h2>
+    <a class="btn btn-primary" href="{% url 'sapy:role_create' %}"><i class="bi bi-plus-circle"></i> Nuevo Rol</a>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      {% if roles %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Nombre</th><th>Título</th><th>Activo</th><th></th></tr></thead>
+          <tbody>
+            {% for r in roles %}
+            <tr>
+              <td><code>{{ r.name }}</code></td>
+              <td>{{ r.title }}</td>
+              <td>{% if r.activo %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+              <td class="text-end"><a href="{% url 'sapy:role_detail' r.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear"></i></a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-muted">Sin roles</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+

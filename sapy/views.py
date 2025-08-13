@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.utils import timezone
-from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, Menu, MenuPage, ApplicationMenu, Icon, _derive_form_question_defaults
+from .models import Application, ApplicationDependency, DeploymentLog, DbTable, DbColumn, DbTableColumn, Page, PageTable, Modal, PageModal, ModalForm, Menu, MenuPage, ApplicationMenu, Role, RoleMenu, Icon, _derive_form_question_defaults
 from .forms import ApplicationForm, QuickDeployForm, DbTableForm, DbColumnForm, DbTableColumnForm
 from django.db import models
 import subprocess
@@ -675,6 +675,28 @@ def db_table_detail(request, pk):
     except Exception as exc:
         messages.error(request, f'No se pudo abrir el detalle de la tabla: {exc}')
         return redirect('sapy:db_table_list')
+
+
+@login_required
+@require_POST
+def db_table_column_inline_update(request, pk):
+    """Actualiza en línea campos override de DbTableColumn: is_nullable, is_unique, is_index, default_value."""
+    table_column = get_object_or_404(DbTableColumn, pk=pk)
+    field = request.POST.get('field')
+    value = request.POST.get('value')
+    if field not in ['is_nullable', 'is_unique', 'is_index', 'default_value']:
+        return JsonResponse({'success': False, 'message': 'Campo no permitido'}, status=400)
+    try:
+        if field == 'default_value':
+            table_column.default_value = value or ''
+        else:
+            # toggle Sí/No o boolean textual
+            v = (str(value).lower() in ['true','1','si','sí','yes','on'])
+            setattr(table_column, field, v)
+        table_column.save(update_fields=[field])
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
 @login_required
@@ -1839,6 +1861,87 @@ def menu_create(request):
             except Exception as e:
                 messages.error(request, f'Error creando menú: {e}')
     return render(request, 'menu_form.html', {'title': 'Nuevo Menú'})
+
+
+@login_required
+def roles_list(request):
+    roles = Role.objects.all().order_by('name')
+    return render(request, 'roles_list.html', {'roles': roles, 'title': 'Roles'})
+
+
+@login_required
+def role_create(request):
+    if request.method == 'POST':
+        name = (request.POST.get('name') or '').strip().lower()
+        title = (request.POST.get('title') or '').strip()
+        description = (request.POST.get('description') or '').strip()
+        if not name or not title:
+            messages.error(request, 'Nombre y Título son obligatorios')
+        else:
+            try:
+                r = Role.objects.create(name=name, title=title, description=description)
+                messages.success(request, f'Rol "{r.title}" creado')
+                return redirect('sapy:role_detail', role_id=r.id)
+            except Exception as e:
+                messages.error(request, f'Error creando rol: {e}')
+    return render(request, 'role_form.html', {'title': 'Nuevo Rol'})
+
+
+@login_required
+def role_detail(request, role_id: int):
+    role = get_object_or_404(Role, pk=role_id)
+    assigned = role.menus.select_related('menu').all()
+    assigned_ids = assigned.values_list('menu_id', flat=True)
+    available = Menu.objects.exclude(id__in=assigned_ids).filter(activo=True).order_by('name')
+    # Asignar/desasignar
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        menu_id = request.POST.get('menu_id')
+        if action == 'assign' and menu_id:
+            try:
+                m = get_object_or_404(Menu, pk=menu_id)
+                RoleMenu.objects.get_or_create(role=role, menu=m)
+                messages.success(request, f'Menú "{m.title}" asignado al rol')
+            except Exception as e:
+                messages.error(request, f'Error al asignar menú: {e}')
+        elif action == 'unassign' and menu_id:
+            try:
+                rm = role.menus.filter(menu_id=menu_id).first()
+                if rm:
+                    t = rm.menu.title
+                    rm.delete()
+                    messages.success(request, f'Menú "{t}" desasignado del rol')
+            except Exception as e:
+                messages.error(request, f'Error al desasignar menú: {e}')
+        return redirect('sapy:role_detail', role_id=role.id)
+    return render(request, 'role_detail.html', {'role': role, 'assigned': assigned, 'available': available, 'title': f'Rol: {role.title}'})
+
+
+@login_required
+@require_POST
+def role_update(request, role_id: int):
+    role = get_object_or_404(Role, pk=role_id)
+    role.title = (request.POST.get('title') or role.title).strip()
+    role.description = (request.POST.get('description') or role.description).strip()
+    activo = request.POST.get('activo')
+    if activo is not None:
+        role.activo = (activo.lower() == 'true')
+    role.save()
+    messages.success(request, 'Rol actualizado')
+    return redirect('sapy:role_detail', role_id=role.id)
+
+
+@login_required
+def role_menus_search(request, role_id: int):
+    role = get_object_or_404(Role, pk=role_id)
+    q = (request.GET.get('q') or '').strip()
+    assigned_ids = role.menus.values_list('menu_id', flat=True)
+    qs = Menu.objects.exclude(id__in=assigned_ids).filter(activo=True)
+    if q:
+        qs = qs.filter(models.Q(name__icontains=q) | models.Q(title__icontains=q))
+    qs = qs.order_by('name')[:20]
+    data = [{ 'id': m.id, 'name': m.name, 'title': m.title, 'icon': m.icon } for m in qs]
+    return JsonResponse({'results': data})
 
 
 @login_required
