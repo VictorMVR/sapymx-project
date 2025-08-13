@@ -2675,21 +2675,30 @@ def generate_field_definition(table_column, column):
         if column.numeric_scale:
             properties.append(f"decimal_places={column.numeric_scale}")
     
-    # Valor por defecto
-    if table_column.default_value:
-        if column.data_type == 'boolean':
-            properties.append(f"default={table_column.default_value.lower()}")
-        elif column.data_type in ['integer', 'bigint', 'smallint']:
-            properties.append(f"default={table_column.default_value}")
-        else:
-            properties.append(f'default="{table_column.default_value}"')
+    # Reglas especiales por nombre de columna
+    if field_name == 'created_at':
+        properties.append('auto_now_add=True')
+    elif field_name == 'updated_at':
+        properties.append('auto_now=True')
+    else:
+        # Valor por defecto genérico
+        if table_column.default_value:
+            if column.data_type == 'boolean':
+                properties.append(f"default={table_column.default_value.lower()}")
+            elif column.data_type in ['integer', 'bigint', 'smallint']:
+                properties.append(f"default={table_column.default_value}")
+            else:
+                properties.append(f'default="{table_column.default_value}"')
     
     # Llave foránea
     if field_name.startswith('id_') and len(field_name.split('_')) > 1:
         referenced_table = field_name[3:]  # Remover 'id_'
-        properties.append(f"on_delete=models.CASCADE")
+        properties.append("on_delete=models.CASCADE")
         properties.append(f'related_name="{table_column.table.name}_set"')
-        field_type = f"models.ForeignKey('{referenced_table.title()}', {', '.join(properties)})"
+        if referenced_table == 'auth_user':
+            field_type = f"models.ForeignKey(settings.AUTH_USER_MODEL, {', '.join(properties)})"
+        else:
+            field_type = f"models.ForeignKey('{referenced_table.title()}', {', '.join(properties)})"
     else:
         field_type = f"{field_type}({', '.join(properties)})"
     
@@ -2751,6 +2760,7 @@ def write_model_to_file(file_path, table_name, model_code):
 	from_lines = [
 		"from django.db import models\n",
 		"from django.utils import timezone\n",
+		"from django.conf import settings\n",
 	]
 	content = existing_content or ""
 	# Eliminar repeticiones de los mismos imports
@@ -2759,7 +2769,7 @@ def write_model_to_file(file_path, table_name, model_code):
 	# Insertar cabecera limpia
 	content = "".join(from_lines) + "\n" + content.lstrip()
 
-	# Reemplazar bloque de clase existente usando regex multiline
+    # Reemplazar bloque de clase existente usando regex multiline
 	pattern = rf"^class\s+{re.escape(model_class)}\(models\.Model\):[\s\S]*?(?=^class\s+|\Z)"
 	re_flags = re.MULTILINE
 	if re.search(pattern, content, flags=re_flags):
@@ -2780,6 +2790,7 @@ def run_migrations_in_app(application, table_name):
         import subprocess
         import os
         import shlex
+        import re
         
         # Cambiar al directorio de la aplicación
         app_dir = f"{application.base_path}/{application.name}"
@@ -2799,7 +2810,34 @@ def run_migrations_in_app(application, table_name):
         env = os.environ.copy()
         env['DJANGO_SETTINGS_MODULE'] = f"{application.name}.settings"
         
-        # Ejecutar makemigrations (sin app label si no está instalada)
+        # Asegurar estructura de migraciones y que la app esté en INSTALLED_APPS
+        settings_path = f"{app_dir}/{application.name}/settings.py"
+        app_pkg_dir = f"{app_dir}/{application.name}"
+        migrations_dir = f"{app_pkg_dir}/migrations"
+        try:
+            os.makedirs(migrations_dir, exist_ok=True)
+            init_file = f"{migrations_dir}/__init__.py"
+            if not os.path.exists(init_file):
+                with open(init_file, 'w') as f:
+                    f.write("")
+        except Exception as e:
+            return {'success': False, 'error': f'No se pudo preparar el paquete de migraciones: {e}'}
+
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                s = f.read()
+            if 'INSTALLED_APPS' in s and application.name not in s:
+                # Insertar el app al final de la lista INSTALLED_APPS
+                s = re.sub(r"(INSTALLED_APPS\s*=\s*\[)([\s\S]*?)(\])",
+                           lambda m: m.group(1) + m.group(2).rstrip() + (",\n    '" + application.name + "'\n") + m.group(3),
+                           s, count=1)
+                with open(settings_path, 'w', encoding='utf-8') as f:
+                    f.write(s)
+                print(f"DEBUG: Añadido {application.name} a INSTALLED_APPS")
+        except Exception as e:
+            print(f"WARNING: No se pudo asegurar INSTALLED_APPS: {e}")
+
+        # Ejecutar makemigrations (global)
         print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
         result = subprocess.run(
             [python_cmd, 'manage.py', 'makemigrations'],
@@ -2816,7 +2854,7 @@ def run_migrations_in_app(application, table_name):
         
         print(f"DEBUG: makemigrations exitoso")
         
-        # Ejecutar migrate (migrar todo; la app destino debe estar en INSTALLED_APPS si corresponde)
+        # Ejecutar migrate (todas las apps)
         print(f"DEBUG: Ejecutando migrate en {app_dir}")
         result = subprocess.run(
             [python_cmd, 'manage.py', 'migrate'],
