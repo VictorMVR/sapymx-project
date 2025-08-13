@@ -2798,11 +2798,11 @@ def run_migrations_in_app(application, table_name):
         env = os.environ.copy()
         env['DJANGO_SETTINGS_MODULE'] = f"{application.name}.settings"
         
-        # Ejecutar makemigrations
-        print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
-                    result = subprocess.run(
-                        [python_cmd, 'manage.py', 'makemigrations', application.name],
-            cwd=app_dir,
+		# Ejecutar makemigrations
+		print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
+		result = subprocess.run(
+			[python_cmd, 'manage.py', 'makemigrations', application.name],
+			cwd=app_dir,
             capture_output=True,
             text=True,
             timeout=60,
@@ -2815,11 +2815,11 @@ def run_migrations_in_app(application, table_name):
         
         print(f"DEBUG: makemigrations exitoso")
         
-        # Ejecutar migrate
-        print(f"DEBUG: Ejecutando migrate en {app_dir}")
-                    result = subprocess.run(
-                        [python_cmd, 'manage.py', 'migrate', application.name],
-            cwd=app_dir,
+		# Ejecutar migrate
+		print(f"DEBUG: Ejecutando migrate en {app_dir}")
+		result = subprocess.run(
+			[python_cmd, 'manage.py', 'migrate', application.name],
+			cwd=app_dir,
             capture_output=True,
             text=True,
             timeout=120,
