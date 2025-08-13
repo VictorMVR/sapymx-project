@@ -2514,25 +2514,43 @@ def generate_django_model_for_table(application, table):
         
         # Verificar permisos de escritura en el directorio Django
         if not os.access(app_django_dir, os.W_OK):
-            # Intentar corregir permisos del directorio
+            # Intentar corregir permisos del directorio sin depender de binarios del sistema
             try:
-                import subprocess
+                import shutil
                 web_user = 'www-data'
-                
-                # Cambiar propietario del directorio
-                subprocess.run(['chown', '-R', f'{web_user}:{web_user}', app_django_dir], 
-                             check=True, capture_output=True)
-                
-                # Cambiar permisos del directorio
-                subprocess.run(['chmod', '775', app_django_dir], 
-                             check=True, capture_output=True)
-                
-                print(f"DEBUG: Permisos del directorio corregidos para usuario {web_user}")
-                
-            except subprocess.CalledProcessError as e:
-                return {'success': False, 'error': f'No se pudieron corregir permisos del directorio {app_django_dir}: {e}'}
+                # chown recursivo si es posible
+                try:
+                    for root, dirs, files in os.walk(app_django_dir):
+                        try:
+                            shutil.chown(root, user=web_user, group=web_user)
+                        except Exception:
+                            pass
+                        for d in dirs:
+                            p = os.path.join(root, d)
+                            try:
+                                shutil.chown(p, user=web_user, group=web_user)
+                            except Exception:
+                                pass
+                        for f in files:
+                            p = os.path.join(root, f)
+                            try:
+                                shutil.chown(p, user=web_user, group=web_user)
+                            except Exception:
+                                pass
+                except Exception:
+                    # si chown falla, continuar a chmod e intentar acceso
+                    pass
+                # chmod del directorio base
+                try:
+                    os.chmod(app_django_dir, 0o775)
+                except Exception:
+                    pass
+                # Revalidar acceso de escritura
+                if not os.access(app_django_dir, os.W_OK):
+                    return {'success': False, 'error': f'No hay permisos de escritura en: {app_django_dir}'}
+                print(f"DEBUG: Permisos del directorio verificados/corregidos (Python) para {app_django_dir}")
             except Exception as e:
-                return {'success': False, 'error': f'Error corrigiendo permisos del directorio: {e}'}
+                return {'success': False, 'error': f'Error corrigiendo/verificando permisos del directorio: {e}'}
         
         # Crear archivo __init__.py si no existe
         init_file = f"{app_django_dir}/__init__.py"
@@ -2556,26 +2574,23 @@ def generate_django_model_for_table(application, table):
         # Verificar permisos del archivo models.py
         if os.path.exists(model_file_path):
             if not os.access(model_file_path, os.W_OK):
-                # Intentar cambiar permisos del archivo
+                # Intentar cambiar permisos del archivo sin binarios externos
                 try:
-                    import subprocess
-                    # Obtener usuario del proceso web
-                    web_user = 'www-data'  # Usuario típico de procesos web
-                    
-                    # Cambiar propietario del archivo
-                    subprocess.run(['chown', f'{web_user}:{web_user}', model_file_path], 
-                                 check=True, capture_output=True)
-                    
-                    # Cambiar permisos del archivo
-                    subprocess.run(['chmod', '664', model_file_path], 
-                                 check=True, capture_output=True)
-                    
-                    print(f"DEBUG: Permisos de models.py corregidos para usuario {web_user}")
-                    
-                except subprocess.CalledProcessError as e:
-                    return {'success': False, 'error': f'No se pudieron corregir permisos de {model_file_path}: {e}'}
+                    import shutil
+                    web_user = 'www-data'
+                    try:
+                        shutil.chown(model_file_path, user=web_user, group=web_user)
+                    except Exception:
+                        pass
+                    try:
+                        os.chmod(model_file_path, 0o664)
+                    except Exception:
+                        pass
+                    if not os.access(model_file_path, os.W_OK):
+                        return {'success': False, 'error': f'No hay permisos de escritura en: {model_file_path}'}
+                    print("DEBUG: Permisos de models.py verificados/corregidos (Python)")
                 except Exception as e:
-                    return {'success': False, 'error': f'Error corrigiendo permisos: {e}'}
+                    return {'success': False, 'error': f'Error corrigiendo/verificando permisos de archivo: {e}'}
         
         # Escribir o actualizar el archivo de modelos
         try:
