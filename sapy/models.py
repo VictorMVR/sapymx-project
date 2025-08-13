@@ -1145,33 +1145,10 @@ class ApplicationTable(models.Model):
         return f"{self.application.name} - {self.table.name}"
 
 
-class ApplicationPage(models.Model):
-    """Relación entre aplicación y página generada/gestionada por SAPY.
-    Permite decidir qué páginas vivirán en una aplicación, independientemente de las tablas BD.
-    """
-
-    application = models.ForeignKey(
-        Application,
-        on_delete=models.CASCADE,
-        related_name='assigned_pages'
-    )
-    page = models.ForeignKey(
-        'Page',
-        on_delete=models.CASCADE,
-        related_name='assigned_applications'
-    )
-    assigned_at = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, help_text='Notas sobre el uso de esta página en la aplicación')
-
-    class Meta:
-        db_table = 'app_generator_application_pages'
-        unique_together = [('application', 'page')]
-        verbose_name = 'Página de Aplicación'
-        verbose_name_plural = 'Páginas de Aplicaciones'
-        ordering = ['application__name', 'page__slug']
-
-    def __str__(self):
-        return f"{self.application.name} - {self.page.slug}"
+"""
+ApplicationPage eliminado: ahora la relación es ApplicationMenu → MenuPage → Page.
+La tabla antigua se migrará con una migración separada que realiza DROP TABLE si existe.
+"""
 
 
 # ==== Gestión de Páginas y Componentes (Pages/Modals/Forms/Table Overrides) ====

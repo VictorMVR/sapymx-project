@@ -18,8 +18,6 @@ urlpatterns = [
     # Menús por aplicación
     path('applications/<int:pk>/menus/', views.application_menus, name='application_menus'),
     path('applications/<int:pk>/menus/search/', views.application_menus_search, name='application_menus_search'),
-    path('applications/<int:pk>/pages/', views.application_pages, name='application_pages'),
-    path('applications/<int:pk>/pages/search/', views.application_pages_search, name='application_pages_search'),
 
     # Logs de deployment
     path('applications/<int:pk>/logs/<int:log_pk>/', views.deployment_log_detail, name='deployment_log_detail'),
