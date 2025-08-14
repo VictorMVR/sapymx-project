@@ -2831,14 +2831,50 @@ def run_migrations_in_app(application, table_name):
                 s = re.sub(r"(INSTALLED_APPS\s*=\s*\[)([\s\S]*?)(\])",
                            lambda m: m.group(1) + m.group(2).rstrip() + (",\n    '" + application.name + "'\n") + m.group(3),
                            s, count=1)
+                # Asegurar import os en settings para DB config
+                if 'import os' not in s:
+                    s = s.replace("from pathlib import Path\n", "from pathlib import Path\nimport os\n") if 'from pathlib import Path\n' in s else ("import os\n" + s)
+                # Asegurar DATABASES apuntando a la BD del modelo Application
+                db_block = [
+                    "DATABASES = {\n",
+                    "    'default': {\n",
+                    "        'ENGINE': 'django.db.backends.postgresql',\n",
+                    f"        'NAME': '{application.db_name}',\n",
+                    f"        'USER': '{application.db_user}',\n",
+                    f"        'PASSWORD': '{application.db_password}',\n",
+                    f"        'HOST': '{application.db_host}',\n",
+                    f"        'PORT': {application.db_port},\n",
+                ]
+                # sslmode si existe
+                if hasattr(application, 'db_sslmode') and getattr(application, 'db_sslmode'):
+                    db_block.append("        'OPTIONS': {'sslmode': '" + str(application.db_sslmode) + "'},\n")
+                else:
+                    # Si host parece de DO, forzar require
+                    if 'ondigitalocean.com' in (application.db_host or ''):
+                        db_block.append("        'OPTIONS': {'sslmode': 'require'},\n")
+                db_block.extend([
+                    "    }\n",
+                    "}\n",
+                ])
+                # Reemplazar bloque DATABASES o anexar si no existe
+                if re.search(r"^DATABASES\s*=\s*\{[\s\S]*?\}\s*$", s, flags=re.MULTILINE):
+                    s = re.sub(r"^DATABASES\s*=\s*\{[\s\S]*?\}\s*$", ''.join(db_block), s, flags=re.MULTILINE)
+                else:
+                    s += "\n" + ''.join(db_block)
                 with open(settings_path, 'w', encoding='utf-8') as f:
                     f.write(s)
-                print(f"DEBUG: Añadido {application.name} a INSTALLED_APPS")
+                print(f"DEBUG: Añadido {application.name} a INSTALLED_APPS y configurada DATABASES")
         except Exception as e:
             print(f"WARNING: No se pudo asegurar INSTALLED_APPS: {e}")
 
         # Ejecutar makemigrations (global)
         print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
+        # Mostrar salida previa útil
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                print('DEBUG: settings.py longitud=', len(f.read()))
+        except Exception:
+            pass
         result = subprocess.run(
             [python_cmd, 'manage.py', 'makemigrations'],
             cwd=app_dir,
