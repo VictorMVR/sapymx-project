@@ -11,6 +11,9 @@
       <a href="{% url 'sapy:menus_list' %}" class="btn btn-outline-info">
         <i class="bi bi-list"></i> Ver Menús
       </a>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-generate-pages">
+        <i class="bi bi-magic"></i> Generar páginas
+      </button>
     </div>
   </div>
 
@@ -41,6 +44,7 @@
                           <th>Orden</th>
                           <th>Existe Ruta</th>
                           <th>Registros</th>
+                          <th class="text-end">Acción</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -52,6 +56,13 @@
                           <td>{{ p.order_index }}</td>
                           <td>{% if p.route_exists is None %}<span class="text-muted">N/D</span>{% elif p.route_exists %}<span class="text-success">Sí</span>{% else %}<span class="text-danger">No</span>{% endif %}</td>
                           <td>{% if p.records == 'N/D' %}<span class="text-muted">N/D</span>{% else %}{{ p.records }}{% endif %}</td>
+                          <td class="text-end">
+                            {% if p.source_type == 'dbtable' and p.table_name %}
+                              <button type="button" class="btn btn-sm btn-outline-primary" onclick="generateForTable('{{ application.name }}','{{ p.table_name }}', this)"><i class="bi bi-magic"></i> Crear página</button>
+                            {% else %}
+                              <span class="text-muted">—</span>
+                            {% endif %}
+                          </td>
                         </tr>
                         {% endfor %}
                       </tbody>
@@ -94,6 +105,23 @@
 {% block extra_js %}
 <script>
 function debounce(fn, d){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), d); } }
+function showSwal(icon, title, html){
+  try{
+    if (window.Swal) { 
+      const options = {icon, title, html, width: 750};
+      // Para mensajes de éxito, quitar el timer para que no desaparezcan automáticamente
+      if (icon === 'success') {
+        options.timer = undefined;
+        options.timerProgressBar = false;
+        options.showConfirmButton = true;
+      }
+      Swal.fire(options); 
+      return; 
+    }
+  }catch(e){}
+  // Fallback
+  alert(title + (html ? ('\n' + (typeof html === 'string' ? html : '')) : ''));
+}
 async function doMenuSearch(){
   const q = (document.getElementById('menuSearch')?.value || '').trim();
   const resultsEl = document.getElementById('menuResults');
@@ -123,7 +151,151 @@ async function doMenuSearch(){
 const triggerMenuSearch = ()=>doMenuSearch();
 document.getElementById('menuSearch')?.addEventListener('input', debounce(doMenuSearch, 250));
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+
+async function submitGeneratePages(ev){
+  ev?.preventDefault();
+  const form = document.getElementById('genPagesForm');
+  const fd = new FormData(form);
+  const btn = document.getElementById('genSubmit');
+  const spin = document.getElementById('genSpinner');
+  btn?.setAttribute('disabled','disabled'); spin?.classList.remove('d-none');
+  try{
+    const resp = await fetch('{% url "sapy:application_generate_pages" application.pk %}', {
+      method:'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, body: fd
+    });
+    const data = await resp.json();
+    const out = document.getElementById('genLog');
+    const txt = (data.log || data.message || '').slice(-4000);
+    out.textContent = txt;
+    if (data.success){
+      showSwal('success','Generación completada', `<pre style="text-align:left;white-space:pre-wrap">${txt}</pre>`, true);
+      // No recargar inmediatamente, esperar confirmación del usuario
+    } else {
+      showSwal('error','Error al generar páginas', `<pre style="text-align:left;white-space:pre-wrap">${txt}</pre>`);
+    }
+    if (data.success){
+      // No recargar inmediatamente, esperar confirmación del usuario
+      // El usuario puede recargar manualmente después de ver el mensaje
+    }
+  }catch(e){
+    showSwal('error','Error de red','');
+  } finally {
+    btn?.removeAttribute('disabled'); spin?.classList.add('d-none');
+  }
+}
+
+async function doTableSearch(){
+  const q = (document.getElementById('tableSearch')?.value || '').trim();
+  const resultsEl = document.getElementById('tableResults');
+  const emptyEl = document.getElementById('tableEmpty');
+  if (!q){ resultsEl.innerHTML=''; emptyEl?.classList.add('d-none'); return; }
+  try{
+    const resp = await fetch('{% url "sapy:application_tables_search" application.pk %}?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    const data = await resp.json();
+    const rows = (data.results || []).map(item => `
+      <button type="button" class="list-group-item list-group-item-action" onclick="addTableToken('${item.name}')">
+        <div class="fw-semibold">${escapeHtml(item.name)}</div>
+        <div class="small text-muted">${escapeHtml(item.description || '')}</div>
+      </button>
+    `).join('');
+    if (rows){ resultsEl.innerHTML = rows; emptyEl?.classList.add('d-none'); }
+    else { resultsEl.innerHTML=''; emptyEl?.classList.remove('d-none'); }
+  }catch(e){ console.error(e); }
+}
+document.getElementById('tableSearch')?.addEventListener('input', debounce(doTableSearch, 250));
+
+function addTableToken(name){
+  name = (name || '').trim(); if (!name) return;
+  const sel = document.getElementById('tableSelected');
+  const hidden = document.getElementById('tablesHidden');
+  const current = new Set((hidden.value || '').split(',').map(s=>s.trim()).filter(Boolean));
+  if (current.has(name)) return;
+  current.add(name);
+  hidden.value = Array.from(current).join(',');
+  const token = document.createElement('span');
+  token.className = 'badge text-bg-primary';
+  token.innerHTML = `${escapeHtml(name)} <button type="button" class="btn btn-sm btn-light ms-1" onclick="removeTableToken('${name}', this)">x</button>`;
+  sel.appendChild(token);
+}
+function removeTableToken(name, btn){
+  const hidden = document.getElementById('tablesHidden');
+  const current = new Set((hidden.value || '').split(',').map(s=>s.trim()).filter(Boolean));
+  current.delete(name);
+  hidden.value = Array.from(current).join(',');
+  const token = btn?.closest('span'); if (token) token.remove();
+}
+
+async function generateForTable(appName, tableName, formEl){
+  try{
+    const fd = new FormData();
+    fd.append('tables', tableName);
+    fd.append('overwrite', 'true');
+    const resp = await fetch('{% url "sapy:application_generate_pages" application.pk %}', {
+      method:'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, body: fd
+    });
+    const data = await resp.json();
+    const txt = (data.log || data.message || '').slice(-4000);
+    if (data.success){ 
+      showSwal('success','Generación completada', `<pre style="text-align:left;white-space:pre-wrap">${txt}</pre>`, true); 
+      // No recargar inmediatamente, esperar confirmación del usuario
+    }
+    else { showSwal('error','Error al generar páginas', `<pre style="text-align:left;white-space:pre-wrap">${txt}</pre>`); }
+  }catch(e){ showSwal('error','Error de red',''); }
+  return false;
+}
 </script>
+
+<!-- Modal: Generar páginas -->
+<div class="modal fade" id="modal-generate-pages" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Generar páginas</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="genAlert" class="alert d-none" role="alert"></div>
+        <form id="genPagesForm" onsubmit="submitGeneratePages(event)">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">Tablas</label>
+            <div class="mb-2">
+              <input id="tableSearch" type="text" class="form-control" placeholder="Buscar tablas asignadas...">
+            </div>
+            <div id="tableResults" class="list-group mb-2"></div>
+            <div id="tableEmpty" class="text-center py-2 d-none text-muted">Sin resultados</div>
+            <div class="form-text mb-2">Selecciona de la lista para agregarlas. O deja vacío y marca “Todas las asignadas”.</div>
+            <div id="tableSelected" class="d-flex flex-wrap gap-2"></div>
+            <input id="tablesHidden" name="tables" type="hidden" value="">
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="allAssigned" name="all_assigned" value="true">
+            <label class="form-check-label" for="allAssigned">Todas las tablas asignadas</label>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Título del botón del modal</label>
+            <input name="btn_title" type="text" class="form-control" placeholder="Agregar registro">
+            <div class="form-text">Si se deja vacío, no se muestra el botón del modal en la página.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Slug de menú (opcional)</label>
+            <input name="menu" type="text" class="form-control" placeholder="principal">
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="overwrite" name="overwrite" value="true" checked>
+            <label class="form-check-label" for="overwrite">Sobrescribir bloques sapy-auto existentes</label>
+          </div>
+          <div class="d-flex justify-content-end align-items-center gap-2">
+            <div id="genSpinner" class="spinner-border spinner-border-sm text-primary d-none" role="status"></div>
+            <button id="genSubmit" type="submit" class="btn btn-primary">Generar</button>
+          </div>
+        </form>
+        <hr>
+        <pre id="genLog" class="bg-light p-2 small" style="max-height: 220px; overflow:auto"></pre>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 

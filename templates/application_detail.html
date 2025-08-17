@@ -306,6 +306,19 @@
                         <small class="text-muted d-block mt-2">Este proceso puede tomar varios minutos</small>
                     </div>
                     
+                    {% elif application.status == 'reinstalling' %}
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-warning mb-3" role="status">
+                            <span class="visually-hidden">Reinstalando...</span>
+                        </div>
+                        <p>Reinstalación en progreso...</p>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" 
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                        <small class="text-muted d-block mt-2">Actualizando aplicación con nuevo menú dinámico...</small>
+                    </div>
+                    
                     {% elif application.status == 'deployed' %}
                     <div class="text-center py-4">
                         <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
@@ -324,6 +337,21 @@
                                class="btn btn-outline-secondary btn-sm">
                                 <i class="bi bi-speedometer2"></i> Admin Django
                             </a>
+                        </div>
+                        
+                        <!-- Botón de reinstalación -->
+                        <div class="mt-3 pt-3 border-top">
+                            <form method="post" action="{% url 'sapy:application_deploy' application.pk %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-warning btn-sm" 
+                                        onclick="return confirm('¿Estás seguro de que quieres reinstalar la aplicación? Esto actualizará el dashboard con el nuevo menú dinámico.')">
+                                    <i class="bi bi-arrow-clockwise"></i> Reinstalar Aplicación
+                                </button>
+                            </form>
+                            <small class="text-muted d-block mt-2">
+                                <i class="bi bi-info-circle"></i> 
+                                Reinstalar actualizará la aplicación con el nuevo menú dinámico y mejoras del dashboard
+                            </small>
                         </div>
                     </div>
                     
@@ -410,13 +438,13 @@ function confirmDeleteApplication(applicationName) {
     });
 }
 
-// Auto-actualizar estado si está instalando
-{% if application.status == 'installing' %}
+// Auto-actualizar estado si está instalando o reinstalando
+{% if application.status == 'installing' or application.status == 'reinstalling' %}
 setInterval(function() {
     fetch("{% url 'sapy:application_status' application.pk %}")
         .then(response => response.json())
         .then(data => {
-            if (data.status !== 'installing') {
+            if (data.status !== 'installing' && data.status !== 'reinstalling') {
                 location.reload();
             }
         });

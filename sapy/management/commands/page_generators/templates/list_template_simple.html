@@ -1,0 +1,99 @@
+{{{% extends 'base.html' %}}
+{{{% load static %}}
+{{{% load ui_extras %}}
+{{{% block content %}}
+<!-- [sapy-auto:{table_name}:list start] -->
+<div class="page page-{page_slug}">
+  <h1 class="page-title">{page_title}</h1>
+
+  <hr class="section-sep" />
+  <div class="modal-cta text-center">
+    <button type="button" class="btn btn-primary modal-cta-btn" data-bs-toggle="modal" data-bs-target="#modal-{table_name}-form">
+      <i class="fas fa-plus"></i>
+      <span class="d-none d-sm-inline">Agregar</span>
+    </button>
+  </div>
+
+  <hr class="section-sep" />
+  <section class="data-table-wrap">
+    <div class="table-toolbar d-flex justify-content-between align-items-center gap-2">
+      <div class="table-filters"><!-- filtros --></div>
+      <div class="d-flex align-items-center gap-2 ms-auto">
+        <div class="table-search"><!-- búsqueda --></div>
+        <div class="table-exports d-flex align-items-center gap-1">
+          <a class="btn btn-sm btn-outline-secondary export-csv" href="/{table_name}/export/csv/" title="Exportar CSV">
+            <i class="fas fa-file-csv"></i>
+          </a>
+          <a class="btn btn-sm btn-outline-secondary export-xlsx" href="/{table_name}/export/xlsx/" title="Exportar Excel">
+            <i class="fas fa-file-excel"></i>
+          </a>
+          <a class="btn btn-sm btn-outline-secondary export-pdf" href="/{table_name}/export/pdf/" title="Exportar PDF">
+            <i class="fas fa-file-pdf"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  <table class="table table-striped data-table">
+    <thead class="table-head">
+      <tr>
+        {{{% for col in columns %}}
+        <th{{{% if col.alignment %}}} class="text-{{{{ col.alignment }}}}"{{{% endif %}}}>{{{{ col.title }}}}</th>
+        {{{% endfor %}}
+        <th class="text-end">Acciones</th>
+      </tr>
+    </thead>
+    <tbody class="table-body">
+      {{{% if rows %}}
+      {{{% for row in rows %}}
+      <tr>
+        {{{% for col in columns %}}
+        <td{{{% if col.alignment %}}} class="text-{{{{ col.alignment }}}}"{{{% endif %}}}>
+          {{{% if col.format == 'currency' %}}
+            ${{{{ row|get_item:col.name|floatformat:2 }}}}
+          {{{% elif col.format == 'decimal' %}}
+            {{{{ row|get_item:col.name|floatformat:2 }}}}
+          {{{% elif col.format == 'percent' %}}
+            {{{{ row|get_item:col.name|floatformat:1 }}}}%
+          {{{% elif col.format == 'date' %}}
+            {{{{ row|get_item:col.name|date:"Y-m-d" }}}}
+          {{{% elif col.format == 'datetime' %}}
+            {{{{ row|get_item:col.name|date:"Y-m-d H:i" }}}}
+          {{{% elif col.format == 'badge' %}}
+            <span class="badge bg-secondary">{{{{ row|get_item:col.name }}}}</span>
+          {{{% else %}}
+            {{{{ row|get_item:col.name }}}}
+          {{{% endif %}}
+        </td>
+        {{{% endfor %}}
+        <td class="row-actions text-end">
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-primary btn-edit" 
+                    data-bs-toggle="modal" 
+                    data-bs-target="#modal-{table_name}-form"
+                    data-id="{{{{ row.id }}}}"
+                    title="Editar">
+              <i class="fas fa-edit"></i>
+            </button>
+            <a class="btn btn-outline-danger" 
+               href="{{{% url '{table_name}_delete' row.id %}}}"
+               title="Eliminar">
+              <i class="fas fa-trash"></i>
+            </a>
+          </div>
+        </td>
+      </tr>
+      {{{% endfor %}}
+      {{{% else %}}
+      <tr>
+        <td class="text-center text-muted py-4" colspan="{{{{ columns|length|add:1 }}}}">Sin registros</td>
+      </tr>
+      {{{% endif %}}
+    </tbody>
+  </table>
+  </section>
+
+  {{{% include '{app_name}/modals/{table_name}_form_modal.html' %}}
+</div>
+{{{% endblock %}}
+<!-- [sapy-auto:{table_name}:list end] -->

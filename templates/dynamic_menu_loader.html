@@ -1,0 +1,301 @@
+{% load static %}
+<!-- Cargador del menú dinámico -->
+<div id="dynamic-menu-container">
+    <!-- Spinner de carga -->
+    <div id="menu-loading" class="menu-loading">
+        <div class="spinner"></div>
+        <p>Cargando menú...</p>
+    </div>
+</div>
+
+<style>
+.menu-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: #666;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Ocultar cuando se carga el menú */
+.menu-loaded .menu-loading {
+    display: none;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('dynamic-menu-container');
+    const loading = document.getElementById('menu-loading');
+    
+    // Obtener nombre de la app desde la URL o configuración
+    function getAppName() {
+        // Intentar obtener desde window.appConfig
+        if (window.appConfig && window.appConfig.app_name) {
+            return window.appConfig.app_name;
+        }
+        
+        // Intentar obtener desde el hostname
+        const hostname = window.location.hostname;
+        if (hostname.includes('.')) {
+            return hostname.split('.')[0];
+        }
+        
+        // Fallback: usar 'facxy' como ejemplo
+        return 'facxy';
+    }
+    
+    // Cargar menú desde sapy
+    async function loadDynamicMenu() {
+        try {
+            const appName = getAppName();
+            const response = await fetch(`/sapy/api/menu/${appName}/`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const menuData = await response.json();
+            
+            // Renderizar el menú
+            renderMenu(menuData);
+            
+            // Marcar como cargado
+            document.body.classList.add('menu-loaded');
+            
+        } catch (error) {
+            console.error('Error cargando menú dinámico:', error);
+            showFallbackMenu();
+        }
+    }
+    
+    // Renderizar el menú dinámico
+    function renderMenu(data) {
+        // Crear el HTML del menú usando la plantilla
+        const menuHTML = createMenuHTML(data);
+        
+        // Reemplazar el contenido del contenedor
+        container.innerHTML = menuHTML;
+        
+        // Inicializar el menú
+        initializeMenu();
+    }
+    
+    // Crear HTML del menú
+    function createMenuHTML(data) {
+        return `
+        <div id="dynamic-sidebar" class="dynamic-sidebar">
+            <!-- Botón hamburguesa para móvil -->
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle menu">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+            
+            <!-- Contenido del sidebar -->
+            <div class="sidebar-content">
+                <!-- Header del sidebar -->
+                <div class="sidebar-header">
+                    <h3 class="app-title">${data.app_title || 'Aplicación'}</h3>
+                </div>
+                
+                <!-- Opciones estándar -->
+                <div class="sidebar-section">
+                    <ul class="sidebar-menu">
+                        ${data.standard_options.map(option => {
+                            // Manejo especial para "Cerrar sesión"
+                            if (option.name === 'Cerrar sesión') {
+                                return `
+                                <li class="sidebar-item">
+                                    <a href="#" class="sidebar-link" onclick="logoutUser()">
+                                        <i class="${option.icon}"></i>
+                                        <span class="link-text">${option.name}</span>
+                                    </a>
+                                </li>
+                                `;
+                            }
+                            // Para otras opciones, usar URL normal
+                            return `
+                            <li class="sidebar-item">
+                                <a href="${option.url}" class="sidebar-link">
+                                    <i class="${option.icon}"></i>
+                                    <span class="link-text">${option.name}</span>
+                                </a>
+                            </li>
+                            `;
+                        }).join('')}
+                    </ul>
+                </div>
+                
+                <!-- Menús dinámicos -->
+                ${data.menus.map(menu => `
+                <div class="sidebar-section">
+                    <h4 class="section-title">${menu.name}</h4>
+                    <ul class="sidebar-menu">
+                        ${menu.pages.map(page => `
+                        <li class="sidebar-item">
+                            <a href="${page.url}" class="sidebar-link" 
+                               data-table="${page.table_name || ''}"
+                               title="${page.name}">
+                                <i class="fas fa-file-alt"></i>
+                                <span class="link-text">${page.name}</span>
+                            </a>
+                        </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                `).join('')}
+            </div>
+        </div>
+        
+        <!-- Overlay para móvil -->
+        <div id="sidebar-overlay" class="sidebar-overlay"></div>
+        `;
+    }
+    
+    // Inicializar funcionalidad del menú
+    function initializeMenu() {
+        const sidebar = document.getElementById('dynamic-sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        const body = document.body;
+        
+        if (!sidebar) return;
+        
+        // Toggle sidebar en móvil
+        function toggleSidebar() {
+            body.classList.toggle('sidebar-open');
+        }
+        
+        // Cerrar sidebar al hacer clic en overlay
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', function() {
+                body.classList.remove('sidebar-open');
+            });
+        }
+        
+        // Toggle botón hamburguesa
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', toggleSidebar);
+        }
+        
+        // Cerrar sidebar al hacer clic en enlaces (móvil)
+        const sidebarLinks = sidebar.querySelectorAll('.sidebar-link');
+        sidebarLinks.forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    body.classList.remove('sidebar-open');
+                }
+            });
+        });
+        
+        // Marcar enlace activo
+        const currentPath = window.location.pathname;
+        sidebarLinks.forEach(link => {
+            if (link.getAttribute('href') === currentPath) {
+                link.classList.add('active');
+            }
+        });
+        
+        // Toggle colapsado en desktop (doble clic en header)
+        const sidebarHeader = sidebar.querySelector('.sidebar-header');
+        if (sidebarHeader) {
+            sidebarHeader.addEventListener('dblclick', function() {
+                if (window.innerWidth > 768) {
+                    body.classList.toggle('sidebar-collapsed');
+                }
+            });
+        }
+        
+        // Ajustar contenido principal
+        function adjustMainContent() {
+            const mainContent = document.querySelector('.main-content, .dashboard-content, .card');
+            if (mainContent && window.innerWidth > 768) {
+                if (body.classList.contains('sidebar-collapsed')) {
+                    mainContent.style.marginLeft = 'var(--sidebar-collapsed-width)';
+                } else {
+                    mainContent.style.marginLeft = 'var(--sidebar-width)';
+                }
+            }
+        }
+        
+        // Ejecutar al cargar y al cambiar tamaño
+        adjustMainContent();
+        window.addEventListener('resize', adjustMainContent);
+        
+        // Observar cambios en las clases del body
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    adjustMainContent();
+                }
+            });
+        });
+        
+        observer.observe(body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    }
+    
+    // Mostrar menú de fallback si falla la carga
+    function showFallbackMenu() {
+        container.innerHTML = `
+        <div class="fallback-menu">
+            <p>Error cargando menú dinámico</p>
+            <a href="/" class="btn btn-primary">Inicio</a>
+            <a href="/admin/" class="btn btn-secondary">Admin</a>
+        </div>
+        `;
+    }
+    
+    // Función para cerrar sesión
+    function logoutUser() {
+        // Intentar diferentes métodos de logout
+        const logoutMethods = [
+            '/logout/',
+            '/accounts/logout/',
+            '/auth/logout/',
+            '/user/logout/'
+        ];
+        
+        // Crear un formulario temporal para logout
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout/';
+        
+        // Agregar CSRF token si existe
+        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (csrfToken) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken.value;
+            form.appendChild(csrfInput);
+        }
+        
+        // Agregar al DOM y enviar
+        document.body.appendChild(form);
+        form.submit();
+    }
+    
+    // Cargar el menú
+    loadDynamicMenu();
+});
+</script>

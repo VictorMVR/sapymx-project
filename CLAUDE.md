@@ -42,6 +42,20 @@ python manage.py migrate
 
 # Run custom management commands
 python manage.py add_activo_all  # Adds 'activo' field to all tables
+python manage.py generate_pages --app <app_name> --tables <table_list> --overwrite  # Generates pages from database schemas
+python manage.py sync_icons     # Syncs icon catalogs
+```
+
+### Page Generation Commands
+```bash
+# Generate pages for specific tables
+python manage.py generate_pages --app admischool --tables niveles_educativos,escuelas --overwrite
+
+# Generate all assigned tables for an application
+python manage.py generate_pages --app admischool --all-assigned --overwrite
+
+# Add custom button title and menu
+python manage.py generate_pages --app admischool --tables niveles_educativos --btn-title "Nuevo Nivel" --menu main_menu
 ```
 
 ### Testing and Validation
@@ -83,6 +97,12 @@ SapyMX is a Django web application for dynamic page generation from database sch
 - `ApplicationTable`: Links applications to database tables
 - `DeploymentLog`: Tracks deployment history and status
 
+**Dynamic Menu System**
+- `Menu`: Menu navigation structure with icons and ordering
+- `MenuPage`: Assignments of pages to menus with sections
+- `ApplicationMenu`: Links applications to menus for multi-app navigation
+- `Role`/`RoleMenu`: Role-based access control for menu visibility
+
 ### Key Design Patterns
 
 **Metadata-Driven UI Generation**
@@ -113,19 +133,36 @@ sapy/
 │   ├── settings.py         # Django settings
 │   ├── migrations/         # Database migration files
 │   └── management/         # Custom Django management commands
+│       └── commands/
+│           ├── add_activo_all.py      # Adds activo field to tables
+│           ├── generate_pages.py      # Main page generation command
+│           ├── sync_icons.py          # Syncs icon libraries
+│           └── page_generators/       # Modular page generation system
+│               ├── config_loader.py   # Loads real page configuration
+│               ├── template_generator.py # Generates Django templates
+│               ├── file_manager.py    # Handles file operations
+│               ├── service_manager.py # Manages service reloads
+│               └── templates/         # Template files for generation
+│                   └── views_template.py # Django views template
 ├── templates/              # HTML templates
 │   ├── base.html          # Base template with Bootstrap 5 and grid CSS
 │   ├── dashboard.html     # Main dashboard
+│   ├── dynamic_menu.html  # Dynamic menu system
 │   └── [various page templates]
 ├── static/                 # Static assets
-│   └── css/
-│       └── form-grid.css  # Grid layout system for dynamic forms
+│   ├── css/
+│   │   ├── form-grid.css  # Grid layout system for dynamic forms
+│   │   ├── sapy-theme.css # Main theme and variables
+│   │   └── sapy-components.css # Advanced UI components
+│   ├── js/
+│   │   └── sapy-common.js # Shared JavaScript utilities
+│   └── icons/             # Icon library JSON catalogs
 └── requirements.txt       # Python dependencies
 ```
 
 ### Environment Configuration
 
-The application uses python-decouple for environment variable management:
+The application uses python-decouple and dotenv for environment variable management:
 - `SECRET_KEY`: Django secret key
 - `DEBUG`: Development mode flag
 - `DATABASE_URL`: PostgreSQL connection string
@@ -139,6 +176,11 @@ The application uses python-decouple for environment variable management:
 - **SweetAlert2**: Modal dialogs and notifications
 - **python-decouple**: Environment variable management
 - **dj-database-url**: Database URL parsing
+- **django-crispy-forms**: Form rendering enhancement
+- **crispy-bootstrap5**: Bootstrap 5 form templates
+- **Pillow**: Image processing capabilities
+- **gunicorn**: WSGI HTTP server for production
+- **whitenoise**: Static file serving
 
 ### CSS Framework and UI Standards
 
@@ -163,13 +205,61 @@ SapyMX includes a comprehensive CSS framework that extends Bootstrap 5 with appl
 - Consistent spacing using CSS custom properties
 - Unified hover effects and transitions
 
+### Dynamic Menu System
+
+The application features a sophisticated dynamic menu system that allows generated applications to receive menu configurations from the central SapyMX system:
+
+**Components:**
+- **API Endpoint**: `/sapy/api/menu/<app_name>/` serves menu configuration as JSON
+- **Dynamic Loading**: Apps load menus dynamically without hardcoding navigation
+- **Responsive Design**: Collapsible sidebar with mobile overlay support
+- **Role-Based Access**: Menu visibility controlled by user roles
+
+**Features:**
+- Dark theme sidebar (YouTube/Spotify style)
+- Font Awesome icons integration
+- Active page highlighting
+- Smooth animations and hover effects
+- Bootstrap Icons and Font Awesome support
+
+### Page Configuration System
+
+The system features a sophisticated page configuration interface accessible at `/sapy/pages/<id>/` where administrators define exactly how pages should appear and behave:
+
+**Page Detail Interface Components:**
+- **Page Metadata**: Title, icon, routing, and basic configuration
+- **Table Configuration**: Define which columns show in lists, their titles, alignment, formats, and visibility
+- **Modal Configuration**: Complete control over modal dialogs including size, behavior, and form fields
+- **Form Field Management**: Control field labels, placeholders, widths, requirement status, and visibility
+- **Live Preview**: Real-time preview of how modals will appear when generated
+
+**Critical Form Field Rules:**
+- **Primary Key (ID)**: Always excluded from user forms (handled as hidden field for edits only)
+- **Audit Fields**: `created_at`, `updated_at`, `id_auth_user` are never shown in forms
+- **Active Status**: `activo` field is managed through table actions, not form inputs
+- **Field Visibility**: Each field can be individually shown/hidden in forms
+- **Width Control**: Fractional width system (1-1, 1-2, 1-3, etc.) for responsive layouts
+
 ### Development Workflow
 
 1. **Schema Definition**: Create DbTable and DbColumn instances to define database structure
 2. **UI Generation**: UiColumn, UiField, and FormQuestion objects are automatically created via signals
-3. **Page Creation**: Define Page objects and link to DbTable instances for automatic page generation
-4. **Modal Configuration**: Create Modal and ModalForm objects for CRUD operations
-5. **Customization**: Use override models (PageTableColumnOverride, ModalFormFieldOverride) to customize display
+3. **Page Creation**: Generate Page objects from tables using the interface or API
+4. **Page Configuration**: Use the detailed configuration interface at `/sapy/pages/<id>/` to:
+   - Configure table columns (titles, alignment, formats, visibility)
+   - Set up modals (size, behavior, form mode)
+   - Customize form fields (labels, placeholders, widths, requirements)
+   - Preview the final result in real-time
+5. **Override Management**: System stores overrides in PageTableColumnOverride and ModalFormFieldOverride
+6. **Effective Configuration**: Use `page_effective_config` endpoint to get final merged configuration
+7. **Code Generation**: Generate complete Django applications based on stored configurations
+
+### Signal-Based Automation
+
+The system uses Django signals extensively for automation:
+- **post_save on DbColumn**: Automatically creates UiColumn, UiField, and FormQuestion
+- **post_delete on DbColumn**: Cleans up related UI components
+- Convention-based field type detection and UI component generation
 
 ### Important Conventions
 
@@ -178,3 +268,66 @@ SapyMX includes a comprehensive CSS framework that extends Bootstrap 5 with appl
 - Audit columns for transaction tables: `activo`, `created_at`, `updated_at`, `id_auth_user`
 - CSS classes for form fields: `field-{numerator}-{denominator}` for fractional widths
 - All UI components include an `activo` field for soft deletion/activation control
+- Icon naming: Use Bootstrap Icons (`bi bi-*`) or Font Awesome (`fas fa-*`) classes
+
+### Form Field Filtering Rules
+
+The system applies strict rules about which database columns appear in user forms:
+
+**Excluded Fields (Never in Forms):**
+- Primary key fields with auto-increment (`id` column)
+- Audit timestamp fields: `created_at`, `updated_at`
+- User tracking field: `id_auth_user`
+
+**Special Handling:**
+- `activo` field: Managed via table toggle actions, not form inputs
+- Foreign keys (`id_*`): Rendered as SELECT dropdowns with related table data
+- Primary keys (for editing): Included as hidden fields to maintain record identity
+
+**Override System:**
+- Use `PageTableColumnOverride` for table display customization
+- Use `ModalFormFieldOverride` for form field customization
+- Each override can modify: visibility, labels, placeholders, widths, requirements
+- Overrides are merged with defaults via the `page_effective_config` system
+
+### Code Generation Features
+
+The system can generate complete Django applications with:
+- Database models based on DbTable/DbColumn definitions
+- Views with CRUD operations
+- Templates with responsive design
+- URL configurations
+- Static files and CSS frameworks
+- Dynamic menu integration
+
+### Configuration Management
+
+**Page Effective Configuration System:**
+- Access via `/sapy/pages/<id>/effective-config/` endpoint
+- Merges base column/field definitions with custom overrides
+- Returns JSON configuration used by code generation
+- Handles all filtering rules (excludes ID, audit fields, etc.)
+- Used by the page generation system to create accurate code
+
+**Page Detail Interface:**
+- Comprehensive configuration at `/sapy/pages/<id>/`
+- Real-time form preview with current settings
+- Column management with drag-and-drop reordering
+- Field-level control over visibility, labels, and layout
+- Modal preview showing exact appearance
+
+### Testing and Quality Assurance
+
+- Database table validation scripts
+- Icon synchronization from external catalogs
+- Dynamic menu endpoint testing utilities
+- Migration verification tools
+- Page configuration validation and preview system
+
+### Security Considerations
+
+- Environment-based configuration management
+- Secure database connection handling
+- CSRF protection for forms
+- SQL injection prevention through ORM usage
+- Role-based access control for menus and pages

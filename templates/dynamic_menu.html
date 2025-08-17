@@ -1,0 +1,359 @@
+{% load static %}
+<!-- Menú dinámico moderno estilo YouTube -->
+<div id="dynamic-sidebar" class="dynamic-sidebar">
+    <!-- Botón hamburguesa para móvil -->
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+    </button>
+    
+    <!-- Contenido del sidebar -->
+    <div class="sidebar-content">
+        <!-- Header del sidebar -->
+        <div class="sidebar-header">
+            <h3 class="app-title">{{ app_title|default:"Aplicación" }}</h3>
+        </div>
+        
+        <!-- Opciones estándar -->
+        <div class="sidebar-section">
+            <ul class="sidebar-menu">
+                {% for option in standard_options %}
+                <li class="sidebar-item">
+                    <a href="{{ option.url }}" class="sidebar-link">
+                        <i class="{{ option.icon }}"></i>
+                        <span class="link-text">{{ option.name }}</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <!-- Menús dinámicos -->
+        {% for menu in menus %}
+        <div class="sidebar-section">
+            <h4 class="section-title">{{ menu.name }}</h4>
+            <ul class="sidebar-menu">
+                {% for page in menu.pages %}
+                <li class="sidebar-item">
+                    <a href="{{ page.url }}" class="sidebar-link" 
+                       data-table="{{ page.table_name|default:'' }}"
+                       title="{{ page.name }}">
+                        <i class="fas fa-file-alt"></i>
+                        <span class="link-text">{{ page.name }}</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Overlay para móvil -->
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+<style>
+/* Variables CSS para personalización */
+:root {
+    --sidebar-width: 280px;
+    --sidebar-collapsed-width: 70px;
+    --sidebar-bg: #1a1a1a;
+    --sidebar-hover: #2d2d2d;
+    --sidebar-text: #ffffff;
+    --sidebar-text-muted: #b3b3b3;
+    --sidebar-border: #404040;
+    --sidebar-shadow: 2px 0 8px rgba(0,0,0,0.3);
+    --transition-speed: 0.3s;
+}
+
+/* Sidebar principal */
+.dynamic-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    z-index: 1000;
+    transition: width var(--transition-speed) ease;
+    box-shadow: var(--sidebar-shadow);
+    overflow: hidden;
+}
+
+/* Botón hamburguesa */
+.sidebar-toggle {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: var(--sidebar-text);
+    cursor: pointer;
+    padding: 8px;
+    z-index: 1001;
+    display: none;
+}
+
+.hamburger-line {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: var(--sidebar-text);
+    margin: 4px 0;
+    transition: var(--transition-speed);
+}
+
+/* Contenido del sidebar */
+.sidebar-content {
+    padding: 20px 0;
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Header del sidebar */
+.sidebar-header {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--sidebar-border);
+    margin-bottom: 20px;
+}
+
+.app-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--sidebar-text);
+}
+
+/* Secciones del sidebar */
+.sidebar-section {
+    margin-bottom: 25px;
+}
+
+.section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--sidebar-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0 20px 10px;
+    margin: 0;
+}
+
+/* Menú del sidebar */
+.sidebar-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar-item {
+    margin: 0;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    transition: background-color var(--transition-speed);
+    border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover {
+    background: var(--sidebar-hover);
+    color: var(--sidebar-text);
+    text-decoration: none;
+    border-left-color: #ff0000;
+}
+
+.sidebar-link.active {
+    background: var(--sidebar-hover);
+    border-left-color: #ff0000;
+}
+
+.sidebar-link i {
+    width: 20px;
+    margin-right: 15px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+.link-text {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Overlay para móvil */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    display: none;
+}
+
+/* Estados colapsados */
+.sidebar-collapsed .dynamic-sidebar {
+    width: var(--sidebar-collapsed-width);
+}
+
+.sidebar-collapsed .link-text,
+.sidebar-collapsed .section-title,
+.sidebar-collapsed .app-title {
+    display: none;
+}
+
+.sidebar-collapsed .sidebar-link i {
+    margin-right: 0;
+    font-size: 1.3rem;
+}
+
+.sidebar-collapsed .sidebar-toggle {
+    right: 50%;
+    transform: translateX(50%);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .dynamic-sidebar {
+        transform: translateX(-100%);
+        transition: transform var(--transition-speed) ease;
+    }
+    
+    .sidebar-open .dynamic-sidebar {
+        transform: translateX(0);
+    }
+    
+    .sidebar-toggle {
+        display: block;
+    }
+    
+    .sidebar-open .sidebar-overlay {
+        display: block;
+    }
+    
+    /* Ajustar contenido principal */
+    .main-content {
+        margin-left: 0 !important;
+        padding-left: 20px;
+    }
+}
+
+/* Scrollbar personalizado */
+.sidebar-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: var(--sidebar-border);
+    border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: var(--sidebar-text-muted);
+}
+
+/* Animaciones */
+@keyframes slideIn {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.sidebar-open .dynamic-sidebar {
+    animation: slideIn var(--transition-speed) ease;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sidebar = document.getElementById('dynamic-sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const body = document.body;
+    
+    // Toggle sidebar en móvil
+    function toggleSidebar() {
+        body.classList.toggle('sidebar-open');
+    }
+    
+    // Cerrar sidebar al hacer clic en overlay
+    sidebarOverlay.addEventListener('click', function() {
+        body.classList.remove('sidebar-open');
+    });
+    
+    // Toggle botón hamburguesa
+    sidebarToggle.addEventListener('click', toggleSidebar);
+    
+    // Cerrar sidebar al hacer clic en enlaces (móvil)
+    const sidebarLinks = sidebar.querySelectorAll('.sidebar-link');
+    sidebarLinks.forEach(link => {
+        link.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                body.classList.remove('sidebar-open');
+            }
+        });
+    });
+    
+    // Marcar enlace activo
+    const currentPath = window.location.pathname;
+    sidebarLinks.forEach(link => {
+        if (link.getAttribute('href') === currentPath) {
+            link.classList.add('active');
+        }
+    });
+    
+    // Toggle colapsado en desktop (doble clic en header)
+    const sidebarHeader = sidebar.querySelector('.sidebar-header');
+    sidebarHeader.addEventListener('dblclick', function() {
+        if (window.innerWidth > 768) {
+            body.classList.toggle('sidebar-collapsed');
+        }
+    });
+    
+    // Ajustar contenido principal
+    function adjustMainContent() {
+        const mainContent = document.querySelector('.main-content, .dashboard-content, .card');
+        if (mainContent && window.innerWidth > 768) {
+            if (body.classList.contains('sidebar-collapsed')) {
+                mainContent.style.marginLeft = 'var(--sidebar-collapsed-width)';
+            } else {
+                mainContent.style.marginLeft = 'var(--sidebar-width)';
+            }
+        }
+    }
+    
+    // Ejecutar al cargar y al cambiar tamaño
+    adjustMainContent();
+    window.addEventListener('resize', adjustMainContent);
+    
+    // Observar cambios en las clases del body
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                adjustMainContent();
+            }
+        });
+    });
+    
+    observer.observe(body, {
+        attributes: true,
+        attributeFilter: ['class']
+    });
+});
+</script>

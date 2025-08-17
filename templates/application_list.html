@@ -48,11 +48,11 @@
                                     {% if app.status == 'deployed' %}
                                         <span class="sapy-badge sapy-badge-status-active"><i class="bi bi-check-circle"></i> Desplegada</span>
                                     {% elif app.status == 'installing' %}
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Instalando</span>
+                                        <span class="sapy-badge" style="background-color: rgba(255, 193, 7, 0.1); color: #856404; border: 1px solid rgba(255, 193, 7, 0.3);"><i class="bi bi-hourglass-split"></i> Instalando</span>
                                     {% elif app.status == 'error' %}
-                                        <span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Error</span>
+                                        <span class="sapy-badge" style="background-color: rgba(220, 38, 38, 0.1); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3);"><i class="bi bi-exclamation-triangle"></i> Error</span>
                                     {% elif app.status == 'draft' %}
-                                        <span class="badge bg-info text-dark"><i class="bi bi-pencil"></i> En Diseño</span>
+                                        <span class="sapy-badge" style="background-color: rgba(14, 165, 233, 0.1); color: #0ea5e9; border: 1px solid rgba(14, 165, 233, 0.3);"><i class="bi bi-pencil"></i> En Diseño</span>
                                     {% else %}
                                         <span class="sapy-badge sapy-badge-status-inactive">{{ app.get_status_display }}</span>
                                     {% endif %}

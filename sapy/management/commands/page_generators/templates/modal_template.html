@@ -1,0 +1,175 @@
+<!-- [sapy-auto:{{ table_name }}:modal start] -->
+<div class="modal fade" id="modal-{{ table_name }}-form" tabindex="-1" aria-hidden="true"
+     {% if not modal_config.close_on_backdrop %}data-bs-backdrop="static"{% endif %}
+     {% if not modal_config.close_on_escape %}data-bs-keyboard="false"{% endif %}>
+  <div class="modal-dialog{% if modal_config.size == 'sm' %} modal-sm{% elif modal_config.size == 'lg' %} modal-lg{% elif modal_config.size == 'xl' %} modal-xl{% elif modal_config.size == 'full' %} modal-fullscreen{% endif %}">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ modal_config.title }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="form-{{ table_name }}" class="modal-form" method="post" action="{% url table_name|add:'_create' %}" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="id" id="field-id" />
+          
+          <div class="form-grid">
+            {% for field in form_fields %}
+            {% if field.visible %}
+            <div class="field field-{{ field.width_fraction|default:'1-1' }}">
+              <label class="form-label{% if field.required %} required{% endif %}">{{ field.label }}</label>
+              
+              {% if field.input_type == 'textarea' %}
+                <textarea name="{{ field.name }}" 
+                         class="form-control" 
+                         placeholder="{{ field.placeholder }}"
+                         {% if field.required %}required{% endif %}></textarea>
+              
+              {% elif field.input_type == 'select' %}
+                <select name="{{ field.name }}" 
+                        class="form-select" 
+                        {% if field.required %}required{% endif %}
+                        {% if field.fk_table %}data-fk-table="{{ field.fk_table }}"{% endif %}>
+                  <option value="">{{ field.placeholder|default:'Seleccione...' }}</option>
+                  <!-- Options will be loaded dynamically for FK fields -->
+                </select>
+              
+              {% elif field.input_type == 'checkbox' %}
+                <div class="form-check">
+                  <input type="checkbox" 
+                         name="{{ field.name }}" 
+                         class="form-check-input" 
+                         id="field-{{ field.name }}" 
+                         value="1" />
+                  <label class="form-check-label" for="field-{{ field.name }}">
+                    {{ field.placeholder|default:'Activar' }}
+                  </label>
+                </div>
+              
+              {% elif field.input_type == 'number' %}
+                <input type="number" 
+                       name="{{ field.name }}" 
+                       class="form-control" 
+                       placeholder="{{ field.placeholder }}"
+                       {% if field.step %}step="{{ field.step }}"{% endif %}
+                       {% if field.min_value %}min="{{ field.min_value }}"{% endif %}
+                       {% if field.max_value %}max="{{ field.max_value }}"{% endif %}
+                       {% if field.required %}required{% endif %} />
+              
+              {% elif field.input_type == 'date' %}
+                <input type="date" 
+                       name="{{ field.name }}" 
+                       class="form-control" 
+                       {% if field.required %}required{% endif %} />
+              
+              {% elif field.input_type == 'datetime-local' %}
+                <input type="datetime-local" 
+                       name="{{ field.name }}" 
+                       class="form-control" 
+                       {% if field.required %}required{% endif %} />
+              
+              {% elif field.input_type == 'email' %}
+                <input type="email" 
+                       name="{{ field.name }}" 
+                       class="form-control" 
+                       placeholder="{{ field.placeholder }}"
+                       {% if field.required %}required{% endif %} />
+              
+              {% elif field.input_type == 'file' %}
+                <input type="file" 
+                       name="{{ field.name }}" 
+                       class="form-control" 
+                       {% if field.required %}required{% endif %} />
+              
+              {% else %}
+                <input type="text" 
+                       name="{{ field.name }}" 
+                       class="form-control" 
+                       placeholder="{{ field.placeholder }}"
+                       {% if field.pattern %}pattern="{{ field.pattern }}"{% endif %}
+                       {% if field.required %}required{% endif %} />
+              {% endif %}
+              
+              {% if field.help_text %}
+              <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ modal_config.cancel_button_label }}</button>
+        <button type="submit" class="btn btn-primary" form="form-{{ table_name }}">{{ modal_config.submit_button_label }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Modal form handling for {{ table_name }}
+document.addEventListener('DOMContentLoaded', function() {
+  const modal = document.getElementById('modal-{{ table_name }}-form');
+  const form = document.getElementById('form-{{ table_name }}');
+  
+  // Handle edit button clicks
+  document.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = this.getAttribute('data-id');
+      if (id) {
+        // Load data for editing
+        fetch(`/{{ table_name }}/${id}/json/`)
+          .then(response => response.json())
+          .then(data => {
+            // Populate form fields
+            Object.keys(data).forEach(key => {
+              const field = form.querySelector(`[name="${key}"]`);
+              if (field) {
+                if (field.type === 'checkbox') {
+                  field.checked = Boolean(data[key]);
+                } else {
+                  field.value = data[key] || '';
+                }
+              }
+            });
+            // Set form action to update
+            form.action = `{% url table_name|add:'_update' 0 %}`.replace('/0/', `/${id}/`);
+            // Set modal title
+            modal.querySelector('.modal-title').textContent = 'Editar {{ page_title }}';
+          })
+          .catch(error => {
+            console.error('Error loading data:', error);
+          });
+      }
+    });
+  });
+  
+  // Reset form when modal is hidden
+  modal.addEventListener('hidden.bs.modal', function() {
+    form.reset();
+    form.action = "{% url table_name|add:'_create' %}";
+    modal.querySelector('.modal-title').textContent = '{{ modal_config.title }}';
+    document.getElementById('field-id').value = '';
+  });
+  
+  // Load FK options for select fields
+  form.querySelectorAll('select[data-fk-table]').forEach(select => {
+    const fkTable = select.getAttribute('data-fk-table');
+    fetch(`/ajax/fk/${fkTable}/`)
+      .then(response => response.json())
+      .then(data => {
+        data.results.forEach(item => {
+          const option = document.createElement('option');
+          option.value = item.id;
+          option.textContent = item.label;
+          select.appendChild(option);
+        });
+      })
+      .catch(error => {
+        console.error('Error loading FK options:', error);
+      });
+  });
+});
+</script>
+<!-- [sapy-auto:{{ table_name }}:modal end] -->

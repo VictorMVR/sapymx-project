@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page page-{{ table_name }}">
+  <h1 class="page-title">Confirmar eliminación</h1>
+  
+  <div class="alert alert-warning">
+    <h5><i class="fas fa-exclamation-triangle"></i> ¿Está seguro?</h5>
+    <p>Esta acción eliminará permanentemente este registro de {{ page_title }}.</p>
+    <p><strong>Esta acción no se puede deshacer.</strong></p>
+  </div>
+  
+  <form method="post">
+    {% csrf_token %}
+    <div class="d-flex gap-2">
+      <a class="btn btn-secondary" href="{% url table_name|add:'_list' %}">Cancelar</a>
+      <button class="btn btn-danger" type="submit">
+        <i class="fas fa-trash"></i> Confirmar eliminación
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

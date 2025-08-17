@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<!-- [sapy-auto:{{ table_name }}:list start] -->
+<div class="page page-{{ page_slug }}">
+  <h1 class="page-title">{{ page_title }}</h1>
+
+  {% if shortcuts %}
+  <hr class="section-sep" />
+  <section class="shortcuts-section">
+    <ul class="shortcuts-list">
+      {% for s in shortcuts %}
+      <li class="shortcut-item">
+        <i class="shortcut-icon {{ s.icon }}"></i>
+        <a class="shortcut-label" href="{{ s.url }}">{{ s.label }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <hr class="section-sep" />
+  <div class="modal-cta text-center">
+    <button type="button" class="btn btn-primary modal-cta-btn" data-bs-toggle="modal" data-bs-target="#modal-{{ table_name }}-form">
+      <i class="fas fa-plus"></i>
+      <span class="d-none d-sm-inline">{{ modal_btn_title|default:'Agregar' }}</span>
+    </button>
+  </div>
+
+  <hr class="section-sep" />
+  <section class="data-table-wrap">
+    <div class="table-toolbar d-flex justify-content-between align-items-center gap-2">
+      <div class="table-filters"><!-- filtros --></div>
+      <div class="d-flex align-items-center gap-2 ms-auto">
+        <div class="table-search"><!-- búsqueda --></div>
+        <div class="table-exports d-flex align-items-center gap-1">
+          <a class="btn btn-sm btn-outline-secondary export-csv" href="/{{ table_name }}/export/csv/" title="Exportar CSV">
+            <i class="fas fa-file-csv"></i>
+          </a>
+          <a class="btn btn-sm btn-outline-secondary export-xlsx" href="/{{ table_name }}/export/xlsx/" title="Exportar Excel">
+            <i class="fas fa-file-excel"></i>
+          </a>
+          <a class="btn btn-sm btn-outline-secondary export-pdf" href="/{{ table_name }}/export/pdf/" title="Exportar PDF">
+            <i class="fas fa-file-pdf"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  <table class="table table-striped data-table">
+    <thead class="table-head">
+      <tr>
+        {% for col in columns %}
+        <th{% if col.alignment %} class="text-{{ col.alignment }}"{% endif %}>{{ col.title }}</th>
+        {% endfor %}
+        <th class="text-end">Acciones</th>
+      </tr>
+    </thead>
+    <tbody class="table-body">
+      {% if rows %}
+      {% for row in rows %}
+      <tr>
+        {% for col in columns %}
+        <td{% if col.alignment %} class="text-{{ col.alignment }}"{% endif %}>
+          <!-- Column: {{ col.name }} -->
+          {% if col.name == 'id' %}{{ row.id }}
+          {% elif col.name == 'nombre' %}{{ row.nombre }}
+          {% elif col.name == 'activo' %}{{ row.activo }}
+          {% elif col.name == 'created_at' %}{{ row.created_at|date:"Y-m-d H:i" }}
+          {% elif col.name == 'updated_at' %}{{ row.updated_at|date:"Y-m-d H:i" }}
+          {% else %}
+            <!-- Use getattr fallback for dynamic attributes -->
+            {{ row|default:"-" }}
+          {% endif %}
+        </td>
+        {% endfor %}
+        <td class="row-actions text-end">
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-primary btn-edit" 
+                    data-bs-toggle="modal" 
+                    data-bs-target="#modal-{{ table_name }}-form"
+                    data-id="{{ row.id }}"
+                    title="Editar">
+              <i class="fas fa-edit"></i>
+            </button>
+            <a class="btn btn-outline-danger" 
+               href="{% url table_name|add:'_delete' row.id %}"
+               title="Eliminar">
+              <i class="fas fa-trash"></i>
+            </a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+        <td class="text-center text-muted py-4" colspan="{{ columns|length|add:1 }}">Sin registros</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+  </section>
+
+  <!-- Modal will be included here by the generator -->
+</div>
+{% endblock %}
+<!-- [sapy-auto:{{ table_name }}:list end] -->

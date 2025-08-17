@@ -49,8 +49,8 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('admin/', admin.site.urls),
 
-    # Rutas de la app 'sapy' sin prefijo (ej: /applications/)
-    path('', include('sapy.app_urls')),
+    # Rutas de la app 'sapy' con prefijo /sapy/
+    path('sapy/', include('sapy.app_urls')),
 ]
 
 # Servir archivos estáticos en desarrollo

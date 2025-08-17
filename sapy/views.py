@@ -5,6 +5,8 @@ from django.contrib import messages
 from django.urls import reverse
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
+from django.conf import settings
+import sys, os, subprocess
 import os
 import shutil
 from django.db import transaction
@@ -474,8 +476,13 @@ def _run_install_job(application_id: int, deployment_log_id: int) -> None:
             ret = process.wait(timeout=5*60*60)  # hasta 5 horas
         # Guardar estado final
         if ret == 0:
-            application.status = 'deployed'
-            application.installed_at = timezone.now()
+            # Si era reinstalación, mantener installed_at original
+            if application.status == 'reinstalling':
+                application.status = 'deployed'
+                # No actualizar installed_at para mantener fecha original
+            else:
+                application.status = 'deployed'
+                application.installed_at = timezone.now()
             deployment_log.success = True
         else:
             application.status = 'error'
@@ -504,11 +511,20 @@ def _run_install_job(application_id: int, deployment_log_id: int) -> None:
             pass
 
 
-@login_required
 @require_POST
 def application_deploy(request, pk):
     """Inicia instalación en background usando el script no interactivo."""
     application = get_object_or_404(Application, pk=pk)
+
+    # Permitir reinstalación si ya está desplegada
+    if application.status == 'deployed':
+        # Cambiar estado a 'reinstalling' para indicar reinstalación
+        application.status = 'reinstalling'
+        application.save()
+    else:
+        # Instalación normal
+        application.status = 'installing'
+        application.save()
 
     # Crear log y marcar estado
     deployment_log = DeploymentLog.objects.create(
@@ -518,14 +534,15 @@ def application_deploy(request, pk):
         executed_by=request.user
     )
 
-    application.status = 'installing'
-    application.save()
-
     # Lanzar en background
     t = threading.Thread(target=_run_install_job, args=(application.pk, deployment_log.pk), daemon=True)
     t.start()
 
-    messages.info(request, 'Instalación iniciada. Puedes permanecer en esta página; actualiza el estado arriba.')
+    if application.status == 'reinstalling':
+        messages.info(request, 'Reinstalación iniciada. La aplicación se actualizará con el nuevo menú dinámico.')
+    else:
+        messages.info(request, 'Instalación iniciada. Puedes permanecer en esta página; actualiza el estado arriba.')
+    
     return redirect('sapy:application_detail', pk=application.pk)
 
 
@@ -1441,9 +1458,8 @@ def application_menus(request, pk):
         page_infos = []
         for mp in pages:
             p = mp.page
-            # Existe ruta en app destino? Reutilizamos route_path de Page
-            # Para este generador, tratamos ruta como declarativa; marcamos 'exists' si el proyecto destino está desplegado y la ruta responde 200 (opcional). Por ahora indicamos N/D.
-            route_exists = None  # N/D
+            # Existe ruta en app destino? Verificar leyendo urls.py de la app destino
+            route_exists = _check_route_registered_in_app(application, p)
             # Si es página basada en tabla, verificar registros
             records = 'N/D'
             if p.source_type == 'dbtable' and p.db_table_id:
@@ -1463,6 +1479,8 @@ def application_menus(request, pk):
                 'order_index': mp.order_index,
                 'route_exists': route_exists,
                 'records': records,
+                'source_type': getattr(p, 'source_type', None),
+                'table_name': getattr(p.db_table, 'name', '') if getattr(p, 'db_table_id', None) else '',
             })
         details.append({
             'menu': am.menu,
@@ -1477,6 +1495,79 @@ def application_menus(request, pk):
         'title': f'Menús de {application.display_name}',
     }
     return render(request, 'application_menus.html', context)
+
+
+def _check_route_registered_in_app(application: Application, page: 'Page') -> bool | None:
+    """Best-effort: inspecciona <base_path>/<app>/<app>/urls.py y busca la ruta declarada.
+    Retorna True/False si puede determinar, None si no se puede evaluar.
+    """
+    try:
+        base_path = (application.base_path or '').rstrip('/')
+        app_name = application.name
+        urls_path = os.path.join(base_path, app_name, app_name, 'urls.py')
+        if not (base_path and os.path.exists(urls_path)):
+            return None
+        with open(urls_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        # Buscar bloques generados para esta tabla o la ruta directa en urlpatterns
+        rp = (page.route_path or '').strip('/')
+        if not rp:
+            return None
+        pattern = rf"path\(\s*['\"]{rp}/?['\"]\s*,"
+        import re
+        if re.search(pattern, content):
+            return True
+        # También aceptar bloques sapy-auto de vistas/urls por tabla
+        if page.db_table_id and (f"# [sapy-auto:{page.db_table.name}:urls start" in content):
+            return True
+        return False
+    except Exception:
+        return None
+
+
+@login_required
+@require_POST
+def application_generate_pages(request, pk):
+    """Ejecuta el generador de páginas desde la UI para la Application dada.
+    POST: tables (csv) | all_assigned=true/false, btn_title, menu, overwrite=true/false
+    """
+    application = get_object_or_404(Application, pk=pk)
+    try:
+        tables_csv = request.POST.get('tables', '').strip()
+        all_assigned = request.POST.get('all_assigned', 'false').lower() == 'true'
+        btn_title = (request.POST.get('btn_title') or '').strip() or None
+        menu_slug = (request.POST.get('menu') or '').strip() or None
+        overwrite = request.POST.get('overwrite', 'true').lower() == 'true'
+
+        if not all_assigned and not tables_csv:
+            return JsonResponse({'success': False, 'message': 'Debe seleccionar al menos una tabla o activar all_assigned'}, status=400)
+
+        # Construir comando
+        cmd = [
+            sys.executable, os.path.join(settings.BASE_DIR, 'manage.py'), 'generate_pages',
+            '--app', application.name,
+        ]
+        if all_assigned:
+            cmd.append('--all-assigned')
+        else:
+            cmd.extend(['--tables', tables_csv])
+        if btn_title:
+            cmd.extend(['--btn-title', btn_title])
+        if menu_slug:
+            cmd.extend(['--menu', menu_slug])
+        if overwrite:
+            cmd.append('--overwrite')
+        # Agregar reload automático
+        cmd.append('--reload')
+
+        # Ejecutar en foreground y capturar salida
+        result = subprocess.run(cmd, cwd=settings.BASE_DIR, capture_output=True, text=True, timeout=120)
+        out = (result.stdout or '') + ('\n' + result.stderr if result.stderr else '')
+        if result.returncode != 0:
+            return JsonResponse({'success': False, 'message': 'Error al generar páginas', 'log': out[-4000:]}, status=500)
+        return JsonResponse({'success': True, 'message': 'Generación completada', 'log': out[-4000:]})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
 @login_required
@@ -2227,7 +2318,7 @@ def page_detail(request, page_id: int):
                     ov = overrides_map.get((fq_id, 0)) or overrides_map.get((0, col.id or 0))
                     label = (ov.label_override if (ov and ov.label_override) else base_label)
                     placeholder = (ov.placeholder if (ov and ov.placeholder) else base_placeholder)
-                    width_fraction = getattr(ov, 'width_fraction', None) or '1/1'
+                    width_fraction = getattr(ov, 'width_fraction', None) or '1-1'
                     required = (ov.required_override if (ov and ov.required_override is not None) else base_required)
                     visible = (ov.visible if ov is not None else True)
                     order_idx = (ov.order_index if (ov and ov.order_index is not None) else (getattr(fq, 'order', 1) if fq else (tc.position or 1)))
@@ -2393,7 +2484,7 @@ def modal_form_field_override_save(request, modal_id: int):
     else:
         return JsonResponse({'success': False, 'message': 'form_question_id o db_column_id requerido'}, status=400)
 
-    ov, _ = ModalFormFieldOverride.objects.get_or_create(
+    ov, created = ModalFormFieldOverride.objects.get_or_create(
         modal_form=mf,
         **kwargs_key
     )
@@ -2403,6 +2494,10 @@ def modal_form_field_override_save(request, modal_id: int):
         ov.placeholder = placeholder or None
     if width_fraction in ['1-1','1-2','1-3','2-3','1-4','3-4','1-6','5-6']:
         ov.width_fraction = width_fraction
+    else:
+        # Asegurar clase por defecto si no viene en la petición
+        if not getattr(ov, 'width_fraction', None):
+            ov.width_fraction = '1-1'
     if required_val is not None:
         ov.required_override = required_val
     if visible_str is not None:
@@ -2445,6 +2540,36 @@ def check_table_exists_in_app(application, table):
 	except Exception as e:
 		print(f"ERROR verificando existencia de tabla {table.name}: {e}")
 		return False
+
+
+def check_table_exists_by_name_in_app(application, table_name: str) -> bool:
+    """Verifica existencia de una tabla por nombre, sin requerir instancia DbTable."""
+    try:
+        import psycopg2
+        from psycopg2 import sql
+        for params in _get_app_db_connect_params(application):
+            try:
+                conn = psycopg2.connect(**params)
+                with conn.cursor() as cursor:
+                    query = sql.SQL(
+                        """
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables
+                            WHERE table_schema = 'public'
+                              AND table_name = %s
+                        );
+                        """
+                    )
+                    cursor.execute(query, (table_name,))
+                    exists = cursor.fetchone()[0]
+                conn.close()
+                return bool(exists)
+            except Exception as e:
+                print(f"WARNING: conexión fallida {params.get('host')}:{params.get('port')} → {e}")
+        return False
+    except Exception as e:
+        print(f"ERROR verificando existencia de tabla {table_name}: {e}")
+        return False
 
 
 def get_table_record_count(application, table):
@@ -2514,6 +2639,15 @@ def _ensure_directory_writable(path: str, web_user: str = 'www-data') -> tuple[b
 def generate_django_model_for_table(application, table):
     """Genera un modelo Django para una tabla específica en la aplicación destino."""
     try:
+        # VERIFICACIÓN PREVIA: Si la tabla ya existe, no regenerar
+        print(f"DEBUG: Verificando si la tabla '{table.name}' ya existe en la BD")
+        table_exists = check_table_exists_by_name_in_app(application, table.name)
+        print(f"DEBUG: ¿La tabla '{table.name}' ya existe? {table_exists}")
+        
+        if table_exists:
+            print(f"DEBUG: La tabla '{table.name}' ya existe, no se regenera")
+            return {'success': True, 'message': f'La tabla \'{table.name}\' ya existe en la BD, no es necesario regenerar'}
+        
         # Obtener las columnas de la tabla usando DbTableColumn
         table_columns = table.table_columns.select_related('column').order_by('position')
         
@@ -2695,10 +2829,12 @@ def generate_field_definition(table_column, column):
         referenced_table = field_name[3:]  # Remover 'id_'
         properties.append("on_delete=models.CASCADE")
         properties.append(f'related_name="{table_column.table.name}_set"')
+        # Forzar que la columna en BD sea exactamente el nombre provisto (p.ej., 'id_empresas')
+        prop_str = ", ".join(properties + [f"db_column='{field_name}'"])
         if referenced_table == 'auth_user':
-            field_type = f"models.ForeignKey(settings.AUTH_USER_MODEL, {', '.join(properties)})"
+            field_type = f"models.ForeignKey(settings.AUTH_USER_MODEL, {prop_str})"
         else:
-            field_type = f"models.ForeignKey('{referenced_table.title()}', {', '.join(properties)})"
+            field_type = f"models.ForeignKey('{referenced_table.title()}', {prop_str})"
     else:
         field_type = f"{field_type}({', '.join(properties)})"
     
@@ -2785,28 +2921,31 @@ def write_model_to_file(file_path, table_name, model_code):
 
 
 def run_migrations_in_app(application, table_name):
-    """Ejecuta migraciones en la aplicación destino."""
+    """Ejecuta migraciones en la aplicación destino de forma simple y directa."""
     try:
         import subprocess
         import os
-        import shlex
-        import re
         
-        # Cambiar al directorio de la aplicación
+        # VERIFICACIÓN SIMPLE: Si la tabla ya existe, marcar como exitoso
+        print(f"DEBUG: Verificando si la tabla '{table_name}' ya existe")
+        table_exists = check_table_exists_by_name_in_app(application, table_name)
+        print(f"DEBUG: ¿Tabla '{table_name}' existe? {table_exists}")
+        
+        if table_exists:
+            print(f"DEBUG: Tabla '{table_name}' ya existe - marcando como exitoso")
+            return {'success': True, 'message': f'La tabla \'{table_name}\' ya existe en la BD'}
+        
+        # Directorio de la aplicación
         app_dir = f"{application.base_path}/{application.name}"
         if not os.path.exists(app_dir):
             return {'success': False, 'error': f'Directorio de aplicación no existe: {app_dir}'}
         
-        # Verificar si existe entorno virtual
+        # Configuración simple
         venv_python = f"{app_dir}/venv/bin/python"
-        if os.path.exists(venv_python):
-            python_cmd = venv_python
-            print(f"DEBUG: Usando entorno virtual: {venv_python}")
-        else:
-            python_cmd = 'python'
-            print(f"DEBUG: Usando Python del sistema")
+        python_cmd = venv_python if os.path.exists(venv_python) else 'python'
+        print(f"DEBUG: Usando Python: {python_cmd}")
         
-        # Asegurar que no heredamos DJANGO_SETTINGS_MODULE de SAPY
+        # Entorno
         env = os.environ.copy()
         env['DJANGO_SETTINGS_MODULE'] = f"{application.name}.settings"
         
@@ -2867,73 +3006,117 @@ def run_migrations_in_app(application, table_name):
         except Exception as e:
             print(f"WARNING: No se pudo asegurar INSTALLED_APPS: {e}")
 
-        # Ejecutar makemigrations (global)
-        print(f"DEBUG: Ejecutando makemigrations en {app_dir}")
-        # Mostrar salida previa útil
-        try:
-            with open(settings_path, 'r', encoding='utf-8') as f:
-                print('DEBUG: settings.py longitud=', len(f.read()))
-        except Exception:
-            pass
+        # ENFOQUE SIMPLE: Si no se creó la migración, usar --empty para forzarla
+        print(f"DEBUG: Intentando makemigrations para {table_name}")
+        
+        # Primer intento: makemigrations normal
         result = subprocess.run(
-            [python_cmd, 'manage.py', 'makemigrations'],
-            cwd=app_dir,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=env
+            [python_cmd, 'manage.py', 'makemigrations', application.name],
+            cwd=app_dir, capture_output=True, text=True, timeout=30, env=env
         )
         
         if result.returncode != 0:
-            error_msg = result.stderr if result.stderr else result.stdout
-            return {'success': False, 'error': f'Error en makemigrations: {error_msg}'}
+            return {'success': False, 'error': f'Error en makemigrations: {result.stderr or result.stdout}'}
         
-        print(f"DEBUG: makemigrations exitoso")
+        # Si no detectó cambios, crear migración vacía y editarla después
+        if "No changes detected" in result.stdout:
+            print(f"DEBUG: No se detectaron cambios - creando migración vacía para {table_name}")
+            empty_result = subprocess.run(
+                [python_cmd, 'manage.py', 'makemigrations', application.name, '--empty', '--name', f'create_{table_name}'],
+                cwd=app_dir, capture_output=True, text=True, timeout=30, env=env
+            )
+            if empty_result.returncode != 0:
+                return {'success': False, 'error': f'Error creando migración vacía: {empty_result.stderr or empty_result.stdout}'}
+            
+            # EDITAR LA MIGRACIÓN VACÍA para incluir CreateModel
+            print(f"DEBUG: Editando migración vacía para incluir CreateModel")
+            try:
+                # Encontrar la migración más reciente
+                migrations_dir = f"{app_dir}/{application.name}/migrations"
+                migration_files = [f for f in os.listdir(migrations_dir) if f.startswith('0') and f.endswith('.py')]
+                latest_migration = sorted(migration_files)[-1]
+                migration_path = f"{migrations_dir}/{latest_migration}"
+                
+                print(f"DEBUG: Editando migración: {migration_path}")
+                
+                # Generar el código CreateModel (capitalizar correctamente)
+                class_name = ''.join(word.capitalize() for word in table_name.split('_'))
+                create_model_code = f'''        migrations.CreateModel(
+            name='{class_name}',
+            fields=[
+                ('id', models.IntegerField(primary_key=True, auto_created=True)),
+                ('nombre', models.CharField(max_length=100, unique=True, db_index=True)),
+                ('activo', models.BooleanField(default=True)),
+            ],
+            options={{
+                'db_table': '{table_name}',
+            }},
+        ),'''
+                
+                # Leer y modificar la migración
+                with open(migration_path, 'r', encoding='utf-8') as f:
+                    migration_content = f.read()
+                
+                # Añadir imports y operations
+                if 'from django.db import migrations' in migration_content and 'models' not in migration_content:
+                    migration_content = migration_content.replace(
+                        'from django.db import migrations',
+                        'from django.db import migrations, models'
+                    )
+                
+                migration_content = migration_content.replace(
+                    'operations = [\n    ]',
+                    f'operations = [\n{create_model_code}\n    ]'
+                )
+                
+                # Escribir la migración modificada
+                with open(migration_path, 'w', encoding='utf-8') as f:
+                    f.write(migration_content)
+                
+                print(f"DEBUG: Migración editada exitosamente")
+                
+            except Exception as e:
+                print(f"DEBUG: Error editando migración: {e}")
+                return {'success': False, 'error': f'Error editando migración vacía: {e}'}
         
-        # Ejecutar migrate (todas las apps)
-        print(f"DEBUG: Ejecutando migrate en {app_dir}")
-        result = subprocess.run(
-            [python_cmd, 'manage.py', 'migrate'],
-            cwd=app_dir,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            env=env
+        # MIGRAR SIMPLE: Solo aplicar migraciones SIN validaciones complejas
+        print(f"DEBUG: Ejecutando migrate")
+        migrate_result = subprocess.run(
+            [python_cmd, 'manage.py', 'migrate', application.name],
+            cwd=app_dir, capture_output=True, text=True, timeout=60, env=env
         )
         
-        if result.returncode != 0:
-            error_msg = result.stderr if result.stderr else result.stdout
-            return {'success': False, 'error': f'Error en migrate: {error_msg}'}
+        # MANEJO SIMPLE DE ERRORES DE MIGRATE
+        if migrate_result.returncode != 0:
+            error_output = migrate_result.stderr or migrate_result.stdout
+            print(f"DEBUG: Error en migrate: {error_output}")
+            
+            # Si es error de tabla duplicada, intentar --fake y verificar tabla objetivo
+            if 'already exists' in error_output:
+                print(f"DEBUG: Error de tabla duplicada - intentando --fake")
+                fake_result = subprocess.run(
+                    [python_cmd, 'manage.py', 'migrate', application.name, '--fake'],
+                    cwd=app_dir, capture_output=True, text=True, timeout=30, env=env
+                )
+                # Verificar si nuestra tabla objetivo existe después de --fake
+                final_check = check_table_exists_by_name_in_app(application, table_name)
+                if final_check:
+                    return {'success': True, 'message': f'Tabla \'{table_name}\' creada exitosamente'}
+                else:
+                    return {'success': False, 'error': f'Conflictos resueltos pero tabla \'{table_name}\' no existe - regenerar modelo'}
+            
+            return {'success': False, 'error': f'Error en migraciones: {error_output}'}
         
-        print(f"DEBUG: migrate exitoso")
-        # Validación: confirmar que la tabla existe en la BD de la app destino usando sus settings
-        validate_code = (
-            "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', '" + f"{application.name}.settings" + "');\n"
-            "import django; django.setup();\n"
-            "from django.db import connection;\n"
-            "tn=os.environ.get('TARGET_TABLE');\n"
-            "sql=\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name=%s)\";\n"
-            "with connection.cursor() as c:\n"
-            "    c.execute(sql, [tn]);\n"
-            "    print('EXISTS=' + str(c.fetchone()[0]))\n"
-        )
-        env2 = env.copy()
-        env2['TARGET_TABLE'] = table_name
-        vres = subprocess.run(
-            [python_cmd, '-c', validate_code],
-            cwd=app_dir,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=env2
-        )
-        out = (vres.stdout or '') + ("\n" + vres.stderr if vres.stderr else '')
-        if vres.returncode != 0:
-            return {'success': False, 'error': f'Validación posterior falló: {out.strip()}'}
-        exists_flag = 'EXISTS=True' in out
-        if not exists_flag:
-            return {'success': False, 'error': 'Migraciones ejecutadas pero la tabla no existe en la BD destino (revisa INSTALLED_APPS y app label)'}
-        return {'success': True, 'message': 'Migraciones ejecutadas y tabla confirmada en BD'}
+        # VERIFICACIÓN FINAL SIMPLE
+        print(f"DEBUG: Verificando que la tabla se creó correctamente")
+        final_exists = check_table_exists_by_name_in_app(application, table_name)
+        
+        if final_exists:
+            print(f"DEBUG: ✅ Tabla '{table_name}' creada exitosamente")
+            return {'success': True, 'message': f'Tabla \'{table_name}\' creada exitosamente'}
+        else:
+            print(f"DEBUG: ❌ Tabla '{table_name}' NO fue creada")
+            return {'success': False, 'error': f'Migraciones se ejecutaron pero la tabla \'{table_name}\' no fue creada en la BD'}
         
     except Exception as e:
         import traceback
@@ -3085,48 +3268,155 @@ def _parse_database_url(db_url: str) -> dict:
 
 
 def _get_app_db_connect_params(application: Application) -> list[dict]:
-	"""Genera una lista de configuraciones de conexión a probar, en orden de preferencia.
-	1) Campos del modelo Application
-	2) DATABASE_URL del .env de la app destino (si existe)
-	"""
-	params_list: list[dict] = []
-	# 1) Desde Application
-	base = {
-		'host': application.db_host or 'localhost',
-		'port': application.db_port or 5432,
-		'database': application.db_name,
-		'user': application.db_user,
-		'password': application.db_password or '',
-	}
-	if hasattr(application, 'db_sslmode') and application.db_sslmode:
-		base['sslmode'] = application.db_sslmode
-	params_list.append(base)
-	# 2) Desde .env
-	try:
-		import os
-		base_path = (application.base_path or '').rstrip('/')
-		candidate_envs = []
-		if base_path:
-			candidate_envs.append(f"{base_path}/.env")
-			if application.name:
-				candidate_envs.append(f"{base_path}/{application.name}/.env")
-		for env_path in candidate_envs:
-			if not os.path.exists(env_path):
-				continue
-			content = ''
-			with open(env_path, 'r') as f:
-				content = f.read()
-			for line in content.splitlines():
-				line = line.strip()
-				if not line or line.startswith('#'):
-					continue
-				if line.startswith('DATABASE_URL'):
-					_, _, value = line.partition('=')
-					value = value.strip().strip('"').strip("'")
-					parsed = _parse_database_url(value)
-					if parsed:
-						params_list.append(parsed)
-					break
-	except Exception:
-		pass
-	return params_list
+    """Genera una lista de configuraciones de conexión a probar.
+    Preferir siempre el DATABASE_URL del .env de la app; si no existe, caer a campos del modelo Application.
+    """
+    params_list: list[dict] = []
+    # 1) Desde .env (preferido)
+    try:
+        import os
+        base_path = (application.base_path or '').rstrip('/')
+        candidate_envs = []
+        if base_path:
+            candidate_envs.append(f"{base_path}/.env")
+            if application.name:
+                candidate_envs.append(f"{base_path}/{application.name}/.env")
+        for env_path in candidate_envs:
+            if not os.path.exists(env_path):
+                continue
+            content = ''
+            with open(env_path, 'r') as f:
+                content = f.read()
+            for line in content.splitlines():
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if line.startswith('DATABASE_URL'):
+                    _, _, value = line.partition('=')
+                    value = value.strip().strip('"').strip("'")
+                    parsed = _parse_database_url(value)
+                    if parsed:
+                        # Forzar sslmode=require si el host es DO y no viene en URL
+                        if 'ondigitalocean.com' in (parsed.get('host') or '') and 'sslmode' not in parsed:
+                            parsed['sslmode'] = 'require'
+                        params_list.append(parsed)
+                    break
+    except Exception:
+        pass
+    # 2) Desde Application (fallback)
+    base = {
+        'host': application.db_host or 'localhost',
+        'port': application.db_port or 5432,
+        'database': application.db_name,
+        'user': application.db_user,
+        'password': application.db_password or '',
+    }
+    if hasattr(application, 'db_sslmode') and application.db_sslmode:
+        base['sslmode'] = application.db_sslmode
+    else:
+        if 'ondigitalocean.com' in (base.get('host') or ''):
+            base['sslmode'] = 'require'
+    params_list.append(base)
+    return params_list
+
+def application_dynamic_menu(request, app_name):
+    """Endpoint para servir la configuración del menú dinámico a las apps destino"""
+    
+    # Manejar preflight request OPTIONS
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
+    try:
+        # Buscar la aplicación por nombre
+        application = Application.objects.filter(name=app_name).first()
+        if not application:
+            response = JsonResponse({'error': 'Aplicación no encontrada'}, status=404)
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type'
+            return response
+        
+        # Obtener menús activos de la aplicación (puede estar vacío)
+        menus = []
+        try:
+            app_menus = ApplicationMenu.objects.filter(application=application)
+            
+            for app_menu in app_menus:
+                menu = app_menu.menu
+                if not menu.activo:
+                    continue
+                    
+                # Obtener páginas del menú
+                pages = []
+                try:
+                    menu_pages = MenuPage.objects.filter(menu=menu).order_by('order_index')
+                    
+                    for menu_page in menu_pages:
+                        page = menu_page.page
+                        if not page.activo:
+                            continue
+                            
+                        # Buscar tabla asociada si existe
+                        table_name = None
+                        try:
+                            if hasattr(page, 'db_table') and page.db_table:
+                                table_name = page.db_table.name
+                        except Exception:
+                            pass  # Ignorar errores al obtener tabla asociada
+                        
+                        pages.append({
+                            'id': page.id,
+                            'name': page.title,
+                            'slug': page.slug,
+                            'url': f'/{page.slug}/',
+                            'table_name': table_name,
+                            'orden': menu_page.order_index,
+                            'seccion': menu_page.section or 'General'
+                        })
+                except Exception as e:
+                    print(f"Error obteniendo páginas del menú {menu.name}: {e}")
+                    continue
+                
+                if pages:  # Solo incluir menús que tengan páginas
+                    menus.append({
+                        'id': menu.id,
+                        'name': menu.name,
+                        'slug': menu.title,
+                        'pages': pages
+                    })
+        except Exception as e:
+            print(f"Error obteniendo menús de la aplicación {app_name}: {e}")
+            # Continuar con menús vacíos
+        
+        # Menú base con opciones estándar (siempre presentes)
+        base_menu = {
+            'app_name': application.name,
+            'app_title': application.display_name or application.name.title(),
+            'menus': menus,  # Puede estar vacío
+            'standard_options': [
+                {'name': 'Inicio', 'url': '/', 'icon': 'fas fa-home'},
+                {'name': 'Dashboard', 'url': '/dashboard/', 'icon': 'fas fa-tachometer-alt'},
+                {'name': 'Admin', 'url': '/admin/', 'icon': 'fas fa-cog'},
+                {'name': 'Cerrar sesión', 'url': '/logout/', 'icon': 'fas fa-sign-out-alt'}
+            ]
+        }
+        
+        response = JsonResponse(base_menu)
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+        
+    except Exception as e:
+        print(f"Error en application_dynamic_menu para {app_name}: {e}")
+        import traceback
+        traceback.print_exc()
+        response = JsonResponse({'error': f'Error interno: {str(e)}'}, status=500)
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response

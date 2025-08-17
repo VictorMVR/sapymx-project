@@ -15,6 +15,7 @@ class Application(models.Model):
         ('generating', 'Generando'),
         ('generated', 'Generada'),
         ('installing', 'Instalando'),
+        ('reinstalling', 'Reinstalando'),
         ('deployed', 'Desplegada'),
         ('error', 'Error'),
         ('maintenance', 'Mantenimiento'),
@@ -1007,31 +1008,26 @@ def _derive_form_question_defaults(db_col: DbColumn, page_title: str = None) -> 
         placeholder = f'Ingrese {label.lower()}'
     elif dt == DbColumn.DataTypes.VARCHAR:
         input_type = FormQuestion.InputType.TEXT
-        if db_col.length and db_col.length <= 50:
-            width_fraction = '1-4'
-        elif db_col.length and db_col.length <= 100:
-            width_fraction = '1-2'
-        else:
-            width_fraction = '2-3'
         if db_col.length:
             validation_rule = FormQuestion.ValidationRule.MAX_LENGTH
             validation_value = str(db_col.length)
+        # Mantener '1-1' por defecto para evitar campos angostos
     elif dt == DbColumn.DataTypes.TEXT:
         input_type = FormQuestion.InputType.TEXTAREA
-        width_fraction = '1-1'
         placeholder = f'Ingrese {label.lower()}'
+        # Mantener '1-1'
     elif dt == DbColumn.DataTypes.BOOLEAN:
         input_type = FormQuestion.InputType.CHECKBOX
-        width_fraction = '1-4'
         placeholder = ''
+        # Mantener '1-1'
     elif dt == DbColumn.DataTypes.DATE:
         input_type = FormQuestion.InputType.DATE
-        width_fraction = '1-4'
         placeholder = ''
+        # Mantener '1-1'
     elif dt == DbColumn.DataTypes.TIMESTAMP:
         input_type = FormQuestion.InputType.DATETIME
-        width_fraction = '1-2'
         placeholder = ''
+        # Mantener '1-1'
 
     # Llave foránea por convención id_<tabla>
     if name.startswith('id_') and name != 'id':
@@ -1045,7 +1041,7 @@ def _derive_form_question_defaults(db_col: DbColumn, page_title: str = None) -> 
                 select_label = _title_from_name(table_name)
                 label = f'Seleccionar {select_label}'
                 placeholder = f'Seleccione {select_label.lower()}'
-                width_fraction = '1-2'
+                # Mantener '1-1' por defecto; no estrechar selects
         except Exception:
             pass
 
