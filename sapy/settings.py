@@ -25,20 +25,14 @@ load_dotenv()
 
 SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = os.environ.get('DEBUG','False').lower() == 'true'
-ALLOWED_HOSTS = [h for h in os.environ.get('ALLOWED_HOSTS','').split(',') if h]
-# Carga variables de entorno
-load_dotenv()
-
-# SECRET_KEY = os.environ.get('SECRET_KEY')
-# DEBUG = os.environ.get('DEBUG','False').lower() == 'true'
-# ALLOWED_HOSTS = [h for h in os.environ.get('ALLOWED_HOSTS','').split(',') if h]
-# Carga las variables del archivo .env que creaste
-load_dotenv()
-
-# SECRET_KEY = os.environ.get('SECRET_KEY')
-# DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
-# ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-
+# ALLOWED_HOSTS desde .env, evitando duplicados; asegurar localhost/127.0.0.1
+_raw_hosts = [h.strip() for h in os.environ.get('ALLOWED_HOSTS','').split(',') if h.strip()]
+_seen = set()
+env_hosts = [h for h in _raw_hosts if not (h in _seen or _seen.add(h))]
+for _default in ('localhost', '127.0.0.1'):
+    if _default not in env_hosts:
+        env_hosts.append(_default)
+ALLOWED_HOSTS = env_hosts
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -47,9 +41,9 @@ load_dotenv()
 # SECRET_KEY = 'django-insecure-5$n7@o5_e@*36j-+cn*$7k5@4q&yuz21lc(9jwtrzh_=-&q^9w'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG = True
+# DEBUG = False
 # En desarrollo, habilitar DEBUG por defecto
-DEBUG = True
+# DEBUG = False
 
 # ALLOWED_HOSTS = []
 
@@ -101,9 +95,18 @@ WSGI_APPLICATION = 'sapy.wsgi.application'
 
 
 
+_CONN_MAX_AGE = int(os.environ.get('CONN_MAX_AGE', '0'))
 DATABASES = {
-    'default': dj_database_url.config(default=os.environ.get('DATABASE_URL'), conn_max_age=600)
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=_CONN_MAX_AGE,
+    )
 }
+# Opcional: habilitar health checks si Django/dj-database-url lo soportan
+try:
+    DATABASES['default']['CONN_HEALTH_CHECKS'] = True
+except Exception:
+    pass
 
 
 
